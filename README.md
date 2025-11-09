@@ -1,12 +1,12 @@
-## **lumefitness Server**
+## **VerifiedPIug Server**
 
 #### **Setup Instructions**
 
 ##### **1. Clone the Repository**
 
 ```bash
-git clone https://github.com/sparktechagency/backend-lumefitness.git
-cd backend-lumefitness
+git clone https://github.com/sparktechagency/backend-verifiedPIug.git
+cd backend-verifiedPIug
 ```
 
 ##### **2. Configure Environment Variables**

@@ -1,5 +1,5 @@
 {
-  "name": "lumefitness-server",
+  "name": "verified-plug-server",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {

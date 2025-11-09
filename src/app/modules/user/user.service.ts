@@ -4,10 +4,10 @@ import { TUser } from './user.interface'
 import { User } from './user.model'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { USER_ROLE } from './user.constant'
-// import {
-//   sendUserStatusNotifYToAdmin,
-//   sendUserStatusNotifYToUser,
-// } from './user.utils'
+import {
+  sendUserStatusNotifYToAdmin,
+  sendUserStatusNotifYToUser,
+} from './user.utils'
 
 const registerUserIntoDB = async (payload: TUser) => {
   if (payload.role === 'admin') {
@@ -106,8 +106,8 @@ const changeUserStatusFromDB = async (payload: any) => {
   }
 
   // Send notification to both user and admin
-  // await sendUserStatusNotifYToUser(status, updateUserStatus)
-  // await sendUserStatusNotifYToAdmin(status, updateUserStatus)
+  await sendUserStatusNotifYToUser(status, updateUserStatus)
+  await sendUserStatusNotifYToAdmin(status, updateUserStatus)
 
   return updateUserStatus
 }
