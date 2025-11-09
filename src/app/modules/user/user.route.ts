@@ -66,15 +66,7 @@ router.get(
   UserControllers.getMyProfile,
 )
 
-router.get('/business', auth(USER_ROLE.admin), UserControllers.getAllBusiness)
-
 router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
-
-router.get(
-  '/business/:id',
-  auth(USER_ROLE.admin),
-  UserControllers.getBusinessById,
-)
 
 router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
 

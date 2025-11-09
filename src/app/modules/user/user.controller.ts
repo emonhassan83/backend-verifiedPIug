@@ -46,29 +46,6 @@ const getUserById = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllBusiness = catchAsync(async (req, res) => {
-  req.query.role = USER_ROLE.business
-  const result = await UserService.getAllUsersFromDB(req.query)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Business profiles retrieved successfully!',
-    meta: result.meta,
-    data: result.result,
-  })
-})
-
-const getBusinessById = catchAsync(async (req: Request, res: Response) => {
-  const result = await UserService.geUserByIdFromDB(req.params.id)
-  sendResponse(res, {
-    statusCode: httpStatus.OK,
-    success: true,
-    message: 'Business fetched successfully',
-    data: result,
-  })
-})
-
 const getMyProfile = catchAsync(
   async (req: Request & { user?: any }, res: Response) => {
     const result = await UserService.geUserByIdFromDB(req?.user?._id)
@@ -171,9 +148,7 @@ const deleteAUser = catchAsync(async (req, res) => {
 export const UserControllers = {
   registerUser,
   getAllUsers,
-  getAllBusiness,
   getUserById,
-  getBusinessById,
   getMyProfile,
   changeUserStatus,
   updateUserInfo,
