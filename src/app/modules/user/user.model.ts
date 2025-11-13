@@ -1,16 +1,27 @@
 import bcrypt from 'bcrypt'
+import { Schema, model, Types } from 'mongoose'
 import config from '../../config'
-import { Schema, model } from 'mongoose'
-import { TUser, UserModel } from './user.interface'
+import { TUser } from './user.interface'
+import { generateCryptoString } from '../../utils/generateCryptoString'
 import {
   REGISTER_WITH,
   registerWith,
   USER_ROLE,
   USER_STATUS,
 } from './user.constant'
-import { generateCryptoString } from '../../utils/generateCryptoString'
 
-const userSchema = new Schema<TUser, UserModel>(
+// 🔹 Define SocialProfiles Schema
+const socialProfilesSchema = new Schema(
+  {
+    instagram: { type: String, default: null },
+    linkedin: { type: String, default: null },
+    website: { type: String, default: null },
+  },
+  { _id: false } // nested schema, so no _id field
+)
+
+// 🔹 Define User Schema
+const userSchema = new Schema<TUser>(
   {
     id: {
       type: String,
@@ -32,7 +43,7 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     fcmToken: {
       type: String,
-      default: null
+      default: null,
     },
     photoUrl: {
       type: String,
@@ -40,19 +51,20 @@ const userSchema = new Schema<TUser, UserModel>(
     },
     contractNumber: {
       type: String,
-      required: true,
+      required: false,
+      default: null,
     },
     address: {
       type: String,
       default: null,
     },
-    country: {
+    bio: {
       type: String,
       default: null,
     },
-    city: {
-      type: String,
-      default: null,
+    categories: {
+      type: [String],
+      default: [],
     },
     locationUrl: {
       type: String,
@@ -68,6 +80,10 @@ const userSchema = new Schema<TUser, UserModel>(
         type: [Number], // [longitude, latitude]
         default: [0, 0],
       },
+    },
+    socialProfiles: {
+      type: socialProfilesSchema,
+      default: {},
     },
     role: {
       type: String,
@@ -106,7 +122,10 @@ const userSchema = new Schema<TUser, UserModel>(
       enum: Object.values(USER_STATUS),
       default: USER_STATUS.active,
     },
-    packageExpiry: { type: Date, default: null },
+    packageExpiry: {
+      type: Date,
+      default: null,
+    },
     expireAt: {
       type: Date,
       default: () => {
@@ -125,37 +144,35 @@ const userSchema = new Schema<TUser, UserModel>(
   },
   {
     timestamps: true,
-  },
+  }
 )
 
-// added index for auto delete
+// 🔹 Index & Geo
 userSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 })
 userSchema.index({ location: '2dsphere' })
 
-//* Hash password before saving
+// 🔹 Pre-save hook for password hashing
 userSchema.pre('save', async function (next) {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
-      Number(config.bcrypt_salt_rounds),
+      Number(config.bcrypt_salt_rounds)
     )
   }
   next()
 })
 
-//* Static method to check if user exists by email
-userSchema.statics.isUserExistsByEmail = async function (
-  email: string,
-): Promise<TUser | null> {
+// 🔹 Static methods
+userSchema.statics.isUserExistsByEmail = async function (email: string) {
   return await this.findOne({ email })
 }
 
-//* Static method to compare passwords
 userSchema.statics.isPasswordMatched = async function (
   plainTextPassword: string,
-  hashedPassword: string,
+  hashedPassword: string
 ): Promise<boolean> {
   return await bcrypt.compare(plainTextPassword, hashedPassword)
 }
 
-export const User = model<TUser, UserModel>('User', userSchema)
+// 🔹 Export Model
+export const User = model<TUser>('User', userSchema)

@@ -26,4 +26,4 @@ export const registerWith = [
 export type TUserRole = keyof typeof USER_ROLE
 export type TUserStatus = keyof typeof USER_STATUS
 
-export const UserSearchableFields = ['id', 'name', 'email', 'status']
+export const UserSearchableFields = ['id', 'name']

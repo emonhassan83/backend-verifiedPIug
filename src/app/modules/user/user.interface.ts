@@ -1,6 +1,12 @@
 import { Model, Types } from 'mongoose'
 import { TUserRole, TUserStatus } from './user.constant'
 
+type TSocialProfiles = {
+  instagram: string
+  linkedin: string
+  website: string
+}
+
 export interface TUser {
   _id: Types.ObjectId
   id: string
@@ -11,13 +17,14 @@ export interface TUser {
   photoUrl?: string
   contractNumber?: string
   address: string
-  country: string
-  city: string
+  bio: string
+  categories: string[]
   locationUrl: string
   location: {
     type: 'Point'
     coordinates: [number, number] // [longitude, latitude]
   }
+  socialProfiles: TSocialProfiles
   role: TUserRole
   registerWith: string
   needsPasswordChange: boolean
