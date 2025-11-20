@@ -1,82 +1,104 @@
 import httpStatus from 'http-status'
-import { TContents } from './categories.interface'
+import { TCategory } from './categories.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { Contents } from './categories.models'
+import { Category } from './categories.models'
 import AppError from '../../errors/AppError'
-import { findAdmin } from '../../utils/findAdmin'
-import { User } from '../user/user.model'
+import { uploadToS3 } from '../../utils/s3'
 
-// Create a new content
-const createContents = async (payload: TContents) => {
-  // auto assign created by admin
-  const admin = await findAdmin()
-  if (admin) admin._id = payload.createdBy
+// Create a new Category
+const insertIntoDB = async (payload: TCategory, file: any) => {
+  // Check for duplicates using collation
+  const isExist = await Category.findOne({
+    title: { $regex: `^${payload.title}$`, $options: 'i' },
+  })
+  if (isExist) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      `Category "${payload.title}" already exists`,
+    )
+  }
 
-  const result = await Contents.create(payload)
+  // upload to service image
+  if (file) {
+    payload.logo = (await uploadToS3({
+      file,
+      fileName: `images/categories/logo/${Math.floor(100000 + Math.random() * 900000)}`,
+    })) as string
+  }
+
+  const result = await Category.create(payload)
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Content creation failed')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Category creation failed')
   }
 
   return result
 }
 
-// Get all contents
-const getAllContents = async (query: Record<string, any>) => {
-  const ContentModel = new QueryBuilder(
-    Contents.find({ isDeleted: false }).populate([
-      {
-        path: 'createdBy',
-        select: 'name email photoUrl contactNumber status',
-      },
-    ]),
+// Get all category
+const getAllIntoDB = async (query: Record<string, any>) => {
+  const CategoryModel = new QueryBuilder(
+    Category.find({ isDeleted: false }),
     query,
   )
-    .search(['createdBy'])
+    .search(['title'])
     .filter()
     .paginate()
     .sort()
     .fields()
 
-  const data = await ContentModel.modelQuery
-  const meta = await ContentModel.countTotal()
+  const data = await CategoryModel.modelQuery
+  const meta = await CategoryModel.countTotal()
   return {
     data,
     meta,
   }
 }
 
-// Get content by ID
-const getContentsById = async (id: string) => {
-  const result = await Contents.findById(id).populate([
-    {
-      path: 'createdBy',
-      select: 'name email photoUrl contactNumber status',
-    },
-  ])
+// Get Category by ID
+const getAIntoDB = async (id: string) => {
+  const result = await Category.findById(id)
   if (!result || result?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Oops! Content not found')
+    throw new AppError(httpStatus.NOT_FOUND, 'Oops! Category not found')
   }
 
   return result
 }
 
-// Update content
-const updateContents = async (payload: Partial<TContents>) => {
-  const content = await Contents.findOne()
-  if (!content || content?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Content not found!')
+// Update Category
+const updateAIntoDB = async (
+  id: string,
+  payload: Partial<TCategory>,
+  file: any,
+) => {
+  const category = await Category.findById(id)
+  if (!category || category?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
   }
 
-  // Update the content document
-  Object.assign(content, payload)
-  await content.save()
+  // upload to service image
+  if (file) {
+    payload.logo = (await uploadToS3({
+      file,
+      fileName: `images/categories/logo/${Math.floor(100000 + Math.random() * 900000)}`,
+    })) as string
+  }
 
-  return content
+  const result = await Category.findByIdAndUpdate(id, payload, {
+    new: true,
+  })
+  if (!result) {
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Category record not updated!',
+    )
+  }
+
+  return result
 }
 
-// Delete content
-const deleteContents = async (id: string) => {
-  const result = await Contents.findByIdAndUpdate(
+// Delete Category
+const deleteAIntoDB = async (id: string) => {
+  const result = await Category.findByIdAndUpdate(
     id,
     {
       $set: {
@@ -87,16 +109,16 @@ const deleteContents = async (id: string) => {
   )
 
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Content deletion failed')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Category deletion failed')
   }
 
   return result
 }
 
-export const contentsService = {
-  createContents,
-  getAllContents,
-  getContentsById,
-  updateContents,
-  deleteContents,
+export const CategoryService = {
+  insertIntoDB,
+  getAllIntoDB,
+  getAIntoDB,
+  updateAIntoDB,
+  deleteAIntoDB,
 }

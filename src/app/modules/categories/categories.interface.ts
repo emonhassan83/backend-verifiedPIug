@@ -1,14 +1,11 @@
-import { Model, Types } from 'mongoose'
+import { Model } from 'mongoose'
 
-export interface TContents {
+export interface TCategory {
   _id?: string
-  aboutUs?: string
-  termsAndConditions?: string
-  privacyPolicy?: string
-  supports?: string
-  faq?: string
-  createdBy: Types.ObjectId
+  title: string
+  logo?: string
+  listingCount?: number
   isDeleted?: boolean
 }
 
-export type TContentsModel = Model<TContents, Record<string, unknown>>
+export type TCategoryModel = Model<TCategory, Record<string, unknown>>

@@ -1,30 +1,38 @@
 import { Router } from 'express'
-import { contentsController } from './categories.controller'
+import { CategoryController } from './categories.controller'
 import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import zodValidationRequest from '../../middleware/validateRequest'
-import { contentsValidation } from './categories.validation'
+import { CategoryValidation } from './categories.validation'
+import multer, { memoryStorage } from 'multer'
+import parseData from '../../middleware/parseData'
 
 const router = Router()
+const storage = memoryStorage()
+const upload = multer({ storage })
 
 router.post(
   '/',
   auth(USER_ROLE.admin),
-  zodValidationRequest(contentsValidation.createValidationSchema),
-  contentsController.createContents,
+  upload.single('image'),
+  parseData(),
+  zodValidationRequest(CategoryValidation.createValidationSchema),
+  CategoryController.insertIntoDB,
 )
 
 router.put(
   '/',
   auth(USER_ROLE.admin),
-  zodValidationRequest(contentsValidation.updateValidationSchema),
-  contentsController.updateContents,
+  upload.single('image'),
+  parseData(),
+  zodValidationRequest(CategoryValidation.updateValidationSchema),
+  CategoryController.updateAIntoDB,
 )
 
-router.get('/:id', contentsController.getContentsById)
+router.get('/:id', CategoryController.getAIntoDB)
 
-router.get('/', contentsController.getAllContents)
+router.get('/', CategoryController.getAllIntoDB)
 
-router.delete('/:id', contentsController.deleteContents)
+router.delete('/:id', auth(USER_ROLE.admin), CategoryController.deleteAIntoDB)
 
-export const contentsRoutes = router
+export const CategoryRoutes = router

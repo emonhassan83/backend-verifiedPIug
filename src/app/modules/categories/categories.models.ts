@@ -1,30 +1,19 @@
 import { Schema, model } from 'mongoose'
-import { TContents, TContentsModel } from './categories.interface'
+import { TCategory, TCategoryModel } from './categories.interface'
 
-const contentsSchema = new Schema<TContents>(
+const categorySchema = new Schema<TCategory>(
   {
-    aboutUs: {
+    title: {
       type: String,
+      required: true,
     },
-    termsAndConditions: {
+    logo: {
       type: String,
+      required: true,
     },
-    privacyPolicy: {
-      type: String,
-    },
-    supports: {
-      type: String,
-    },
-    faq: {
-      type: String,
-    },
-    isDeleted: {
-      type: Boolean,
-      default: false,
-    },
-    createdBy: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+    listingCount: {
+      type: Number,
+      default: 0,
     },
   },
   {
@@ -32,9 +21,7 @@ const contentsSchema = new Schema<TContents>(
   },
 )
 
-// filter out deleted documents
-
-export const Contents = model<TContents, TContentsModel>(
-  'Contents',
-  contentsSchema,
+export const Category = model<TCategory, TCategoryModel>(
+  'Category',
+  categorySchema,
 )

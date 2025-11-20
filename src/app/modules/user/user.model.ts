@@ -1,7 +1,7 @@
 import bcrypt from 'bcrypt'
 import { Schema, model, Types } from 'mongoose'
 import config from '../../config'
-import { TUser } from './user.interface'
+import { TUser, UserModel } from './user.interface'
 import { generateCryptoString } from '../../utils/generateCryptoString'
 import {
   REGISTER_WITH,
@@ -175,4 +175,4 @@ userSchema.statics.isPasswordMatched = async function (
 }
 
 // 🔹 Export Model
-export const User = model<TUser>('User', userSchema)
+export const User = model<TUser, UserModel>('User', userSchema)
