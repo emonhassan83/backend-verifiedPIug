@@ -6,6 +6,7 @@ import { contentsRoutes } from '../modules/contents/contents.route'
 import { NotificationRoutes } from '../modules/notification/notification.route'
 import { CategoryRoutes } from '../modules/categories/categories.route'
 import { BannerRoutes } from '../modules/banner/banner.route'
+import { FaqRoutes } from '../modules/faq/faq.route'
 
 const router = Router()
 
@@ -29,6 +30,10 @@ const moduleRoutes = [
   {
     path: '/banners',
     route: BannerRoutes,
+  },
+  {
+    path: '/faq',
+    route: FaqRoutes,
   },
   {
     path: '/contents',
