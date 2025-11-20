@@ -21,9 +21,8 @@ const getAllContents = catchAsync(async (req: Request, res: Response) => {
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Contents retrieved successfully',
-    meta: result.meta,
-    data: result.data,
+    message: 'Content retrieved successfully',
+    data: result.data[0],
   })
 })
 

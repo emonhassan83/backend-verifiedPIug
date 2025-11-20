@@ -12,7 +12,6 @@ const createValidationSchema = z.object({
     supports: z
       .string({ required_error: 'supports us is required' })
       .optional(),
-    faq: z.string({ required_error: 'supports us is required' }).optional(),
   }),
 })
 
@@ -27,20 +26,11 @@ const updateValidationSchema = z.object({
       .optional(),
     supports: z
       .string({ required_error: 'supports us is required' })
-      .optional(),
-    faq: z.string({ required_error: 'supports us is required' }).optional(),
-    createBy: z.string({ required_error: 'createBy is required' }).optional(),
-  }),
-})
-
-const increaseMaxMembersValidation = z.object({
-  body: z.object({
-    maxMembers: z.number({ required_error: 'maxMembers is required' }).optional(),
+      .optional()
   }),
 })
 
 export const contentsValidation = {
   createValidationSchema,
-  updateValidationSchema,
-  increaseMaxMembersValidation
+  updateValidationSchema
 }
