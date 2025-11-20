@@ -17,10 +17,9 @@ const createValidationSchema = z.object({
 
 const updateValidationSchema = z.object({
   body: z.object({
-    category: z
-      .string({
-        required_error: 'FAQ category is required!',
-      })
+    audience: z.enum(Object.values(AUDIENCE) as [string, ...string[]], {
+      required_error: 'FAQ audience is required!',
+    })
       .optional(),
     question: z
       .string({

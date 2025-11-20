@@ -15,7 +15,7 @@ const createFaqIntoDB = async (payload: TFaq) => {
 
 const getAllFaqsFromDB = async (query: Record<string, unknown>) => {
   const faqQuery = new QueryBuilder(Faq.find(), query)
-    .search(['id', 'title'])
+    .search(['title'])
     .filter()
     .sort()
     .paginate()
@@ -42,18 +42,10 @@ const getAFaqFromDB = async (id: string) => {
   return result
 }
 
-const updateFaqFromDB = async (
-  id: string,
-  payload: Partial<TFaq>
-) => {
+const updateFaqFromDB = async (id: string, payload: Partial<TFaq>) => {
   const faq = await Faq.findById(id)
   if (!faq) {
     throw new AppError(httpStatus.NOT_FOUND, 'Faqs not found')
-  }
-
-  // if Faq is deleted then throw error
-  if (faq?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Faq already deleted!')
   }
 
   const updateFaq = await Faq.findByIdAndUpdate(id, payload, {
@@ -72,19 +64,7 @@ const deleteAFaqFromDB = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Faqs not found')
   }
 
-  // if Faq is deleted then throw error
-  if (faq?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Faq already deleted!')
-  }
-
-  const result = await Faq.findByIdAndUpdate(
-    id,
-    {
-      isDeleted: true,
-    },
-    { new: true },
-  )
-
+  const result = await Faq.findByIdAndDelete(id)
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Faq Delete failed')
   }
