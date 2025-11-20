@@ -51,7 +51,6 @@ const userSchema = new Schema<TUser>(
     },
     contractNumber: {
       type: String,
-      required: false,
       default: null,
     },
     address: {

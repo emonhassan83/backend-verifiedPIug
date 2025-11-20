@@ -7,6 +7,7 @@ import { NotificationRoutes } from '../modules/notification/notification.route'
 import { CategoryRoutes } from '../modules/categories/categories.route'
 import { BannerRoutes } from '../modules/banner/banner.route'
 import { FaqRoutes } from '../modules/faq/faq.route'
+import { VerificationRoutes } from '../modules/verification/verification.route'
 
 const router = Router()
 
@@ -26,6 +27,10 @@ const moduleRoutes = [
   {
     path: '/categories',
     route: CategoryRoutes,
+  },
+  {
+    path: '/verifications',
+    route: VerificationRoutes,
   },
   {
     path: '/banners',
