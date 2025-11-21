@@ -8,6 +8,7 @@ import { CategoryRoutes } from '../modules/categories/categories.route'
 import { BannerRoutes } from '../modules/banner/banner.route'
 import { FaqRoutes } from '../modules/faq/faq.route'
 import { VerificationRoutes } from '../modules/verification/verification.route'
+import { PortfolioRoutes } from '../modules/portfolio/portfolio.route'
 
 const router = Router()
 
@@ -27,6 +28,10 @@ const moduleRoutes = [
   {
     path: '/categories',
     route: CategoryRoutes,
+  },
+  {
+    path: '/portfolio',
+    route: PortfolioRoutes,
   },
   {
     path: '/verifications',
