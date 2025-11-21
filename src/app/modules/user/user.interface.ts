@@ -18,7 +18,7 @@ export interface TUser {
   contractNumber?: string
   address: string
   bio: string
-  categories: string[]
+  categories: Types.ObjectId[]
   locationUrl: string
   location: {
     type: 'Point'

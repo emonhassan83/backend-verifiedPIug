@@ -4,18 +4,61 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Verification } from './verification.models'
 import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
+import { User } from '../user/user.model'
+import { TKycStatus } from './verification.constants'
 
 // Create a new Verification
-const insertIntoDB = async (payload: TVerification, file: any) => {
-  // upload to service image
-  if (file) {
-    payload.identityVerification.frontSide = (await uploadToS3({
-      file,
-      fileName: `images/categories/logo/${Math.floor(100000 + Math.random() * 900000)}`,
-    })) as string
+const insertIntoDB = async (
+  userId: string,
+  payload: TVerification,
+  files: any,
+) => {
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
+  const existingOne = await Verification.findOne({
+    user: user._id,
+  })
+  if (existingOne) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'User already sent kyc verification!',
+    )
+  }
+
+  // Validate uploaded files
+  const images = files?.images
+
+  if (!images || images.length !== 2) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Two files are required: frontSide and backSide',
+    )
+  }
+
+  const [frontFile, backFile] = images
+
+  // Upload front side
+  const frontSideUrl = await uploadToS3({
+    file: frontFile,
+    fileName: `verification/front/${Date.now()}_${frontFile.originalname}`,
+  })
+
+  // Upload back side
+  const backSideUrl = await uploadToS3({
+    file: backFile,
+    fileName: `verification/back/${Date.now()}_${backFile.originalname}`,
+  })
+
+  // Assign into payload
+  payload.user = user._id
+  payload.identityVerification.frontSide = frontSideUrl as string
+  payload.identityVerification.backSide = backSideUrl as string
+
   const result = await Verification.create(payload)
+
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Verification creation failed')
   }
@@ -25,10 +68,7 @@ const insertIntoDB = async (payload: TVerification, file: any) => {
 
 // Get all Verification
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const VerificationModel = new QueryBuilder(
-    Verification.find(),
-    query,
-  )
+  const VerificationModel = new QueryBuilder(Verification.find(), query)
     .search([''])
     .filter()
     .paginate()
@@ -54,18 +94,20 @@ const getAIntoDB = async (id: string) => {
 }
 
 // Update Verification
-const updateAIntoDB = async (
-  id: string,
-  payload: Partial<TVerification>,
-) => {
+const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
+  const { status } = payload
   const verification = await Verification.findById(id)
   if (!verification) {
     throw new AppError(httpStatus.NOT_FOUND, 'Verification not found!')
   }
 
-  const result = await Verification.findByIdAndUpdate(id, payload, {
-    new: true,
-  })
+  const result = await Verification.findByIdAndUpdate(
+    id,
+    { status },
+    {
+      new: true,
+    },
+  )
   if (!result) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,

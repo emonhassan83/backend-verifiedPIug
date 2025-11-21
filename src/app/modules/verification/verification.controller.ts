@@ -4,7 +4,8 @@ import { VerificationService } from './verification.service'
 import sendResponse from '../../utils/sendResponse'
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await VerificationService.insertIntoDB(req.body, req.files)
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] }
+  const result = await VerificationService.insertIntoDB(req.user._id, req.body, files)
 
   sendResponse(res, {
     statusCode: 200,
@@ -41,7 +42,10 @@ const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 // Update Verification
 const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await VerificationService.updateAIntoDB(req.params.id, req.body)
+  const result = await VerificationService.updateAIntoDB(
+    req.params.id,
+    req.body,
+  )
 
   sendResponse(res, {
     statusCode: 200,
@@ -50,7 +54,6 @@ const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
     data: result,
   })
 })
-
 
 // Delete Verification
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {

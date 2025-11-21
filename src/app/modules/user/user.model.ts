@@ -17,7 +17,7 @@ const socialProfilesSchema = new Schema(
     linkedin: { type: String, default: null },
     website: { type: String, default: null },
   },
-  { _id: false } // nested schema, so no _id field
+  { _id: false }, // nested schema, so no _id field
 )
 
 // 🔹 Define User Schema
@@ -62,7 +62,8 @@ const userSchema = new Schema<TUser>(
       default: null,
     },
     categories: {
-      type: [String],
+      type: [Schema.Types.ObjectId],
+      ref: 'Category',
       default: [],
     },
     locationUrl: {
@@ -143,7 +144,7 @@ const userSchema = new Schema<TUser>(
   },
   {
     timestamps: true,
-  }
+  },
 )
 
 // 🔹 Index & Geo
@@ -155,7 +156,7 @@ userSchema.pre('save', async function (next) {
   if (this.isModified('password')) {
     this.password = await bcrypt.hash(
       this.password,
-      Number(config.bcrypt_salt_rounds)
+      Number(config.bcrypt_salt_rounds),
     )
   }
   next()
@@ -168,7 +169,7 @@ userSchema.statics.isUserExistsByEmail = async function (email: string) {
 
 userSchema.statics.isPasswordMatched = async function (
   plainTextPassword: string,
-  hashedPassword: string
+  hashedPassword: string,
 ): Promise<boolean> {
   return await bcrypt.compare(plainTextPassword, hashedPassword)
 }
