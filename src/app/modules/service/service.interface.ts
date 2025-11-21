@@ -1,0 +1,18 @@
+import { Model, Types } from 'mongoose'
+import { TPriceType, TServiceStatus } from './service.constants'
+
+export interface TCategory {
+  _id?: string
+  author: Types.ObjectId
+  category: Types.ObjectId
+  title: string
+  subtitle: string
+  description: string
+  images: string[]
+  price: number
+  priceType: TPriceType
+  status: TServiceStatus
+  isDeleted?: boolean
+}
+
+export type TCategoryModel = Model<TCategory, Record<string, unknown>>

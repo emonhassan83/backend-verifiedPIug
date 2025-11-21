@@ -36,6 +36,8 @@ export interface TUser {
   }
   status: TUserStatus
   packageExpiry?: Date
+  avgRating: number
+  ratingCount: number
   expireAt: Date
   isNotify: boolean
   isDeleted: boolean

@@ -126,6 +126,14 @@ const userSchema = new Schema<TUser>(
       type: Date,
       default: null,
     },
+    avgRating: {
+      type: Number,
+      default: 0,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+    },
     expireAt: {
       type: Date,
       default: () => {
