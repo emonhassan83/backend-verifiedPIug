@@ -1,8 +1,8 @@
 import { Schema, model, Types } from 'mongoose'
-import { TCategory, TCategoryModel } from './service.interface'
-import { SERVICE_STATUS } from './service.constants'
+import { TService, TServiceModel } from './service.interface'
+import { PRICE_TYPE, SERVICE_STATUS } from './service.constants'
 
-const categorySchema = new Schema<TCategory>(
+const serviceSchema = new Schema<TService>(
   {
     author: {
       type: Schema.Types.ObjectId,
@@ -33,6 +33,15 @@ const categorySchema = new Schema<TCategory>(
       required: true,
       default: [],
     },
+    price: {
+      type: Number,
+      required: true,
+    },
+    priceType: {
+      type: String,
+      enum: Object.values(PRICE_TYPE),
+      required: true,
+    },
     status: {
       type: String,
       enum: Object.values(SERVICE_STATUS),
@@ -46,7 +55,7 @@ const categorySchema = new Schema<TCategory>(
   { timestamps: true }
 )
 
-export const Category = model<TCategory, TCategoryModel>(
-  'Category',
-  categorySchema
+export const Service = model<TService, TServiceModel>(
+  'Service',
+  serviceSchema
 )

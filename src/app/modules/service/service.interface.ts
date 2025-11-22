@@ -1,7 +1,7 @@
 import { Model, Types } from 'mongoose'
 import { TPriceType, TServiceStatus } from './service.constants'
 
-export interface TCategory {
+export interface TService {
   _id?: string
   author: Types.ObjectId
   category: Types.ObjectId
@@ -15,4 +15,4 @@ export interface TCategory {
   isDeleted?: boolean
 }
 
-export type TCategoryModel = Model<TCategory, Record<string, unknown>>
+export type TServiceModel = Model<TService, Record<string, unknown>>

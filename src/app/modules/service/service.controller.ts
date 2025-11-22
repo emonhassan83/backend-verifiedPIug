@@ -1,73 +1,134 @@
 import { Request, Response } from 'express'
 import catchAsync from '../../utils/catchAsync'
-import { CategoryService } from './service.service'
+import { ServiceService } from './service.service'
 import sendResponse from '../../utils/sendResponse'
+import { SERVICE_STATUS } from './service.constants'
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await CategoryService.insertIntoDB(req.body, req.file)
+  const result = await ServiceService.insertIntoDB(req.user._id, req.body, req.files)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Category created successfully',
+    message: 'Service created successfully',
     data: result,
   })
 })
 
-// Get all Category
+// Get all Service
 const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await CategoryService.getAllIntoDB(req.query)
+  const result = await ServiceService.getAllIntoDB(req.query)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Categories retrieved successfully',
+    message: 'Services retrieved successfully',
     meta: result.meta,
     data: result.data,
   })
 })
 
-// Get Category by ID
+const getActiveServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['status'] = SERVICE_STATUS.active
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Active services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getMyServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['user'] = req.user._id
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'My services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getUserServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['user'] = req.params.userId
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'User services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+// Get Service by ID
 const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await CategoryService.getAIntoDB(req.params.id)
+  const result = await ServiceService.getAIntoDB(req.params.id)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Category retrieved successfully',
+    message: 'Service retrieved successfully',
     data: result,
   })
 })
 
-// Update Category
+// Update Service
 const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await CategoryService.updateAIntoDB(req.params.id, req.body, req.file)
+  const result = await ServiceService.updateAIntoDB(
+    req.params.id,
+    req.body,
+    req.file,
+  )
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Category updated successfully',
+    message: 'Service updated successfully',
     data: result,
   })
 })
 
+const changeStatus = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.changeStatusFromDB(
+    req.params.id,
+    req.body
+  )
 
-// Delete Category
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service status updated successfully',
+    data: result,
+  })
+})
+
+// Delete Service
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await CategoryService.deleteAIntoDB(req.params.id)
+  const result = await ServiceService.deleteAIntoDB(req.params.id)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Category deleted successfully',
+    message: 'Service deleted successfully',
     data: result,
   })
 })
 
-export const CategoryController = {
+export const ServiceController = {
   insertIntoDB,
   getAllIntoDB,
+  getActiveServices,
+  getMyServices,
+  getUserServices,
   getAIntoDB,
   updateAIntoDB,
+  changeStatus,
   deleteAIntoDB,
 }

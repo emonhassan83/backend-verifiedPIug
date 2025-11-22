@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { CategoryController } from './service.controller'
+import { ServiceController } from './service.controller'
 import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import zodValidationRequest from '../../middleware/validateRequest'
-import { CategoryValidation } from './service.validation'
+import { ServiceValidation } from './service.validation'
 import multer, { memoryStorage } from 'multer'
 import parseData from '../../middleware/parseData'
 
@@ -13,26 +13,45 @@ const upload = multer({ storage })
 
 router.post(
   '/',
-  auth(USER_ROLE.admin),
-  upload.single('image'),
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  upload.fields([{ name: 'files', maxCount: 10 }]),
   parseData(),
-  zodValidationRequest(CategoryValidation.createValidationSchema),
-  CategoryController.insertIntoDB,
+  zodValidationRequest(ServiceValidation.createValidationSchema),
+  ServiceController.insertIntoDB,
+)
+
+router.patch(
+  '/status/:id',
+  auth(USER_ROLE.admin),
+  zodValidationRequest(ServiceValidation.changeStatusValidationSchema),
+  ServiceController.changeStatus,
 )
 
 router.put(
-  '/',
-  auth(USER_ROLE.admin),
-  upload.single('image'),
+  '/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  upload.fields([{ name: 'files', maxCount: 10 }]),
   parseData(),
-  zodValidationRequest(CategoryValidation.updateValidationSchema),
-  CategoryController.updateAIntoDB,
+  zodValidationRequest(ServiceValidation.updateValidationSchema),
+  ServiceController.updateAIntoDB,
 )
 
-router.get('/:id', CategoryController.getAIntoDB)
+router.get('/active', ServiceController.getActiveServices)
+router.get(
+  '/my-services',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  ServiceController.getMyServices,
+)
 
-router.get('/', CategoryController.getAllIntoDB)
+router.get('/user/:userId', ServiceController.getUserServices)
+router.get('/:id', ServiceController.getAIntoDB)
 
-router.delete('/:id', auth(USER_ROLE.admin), CategoryController.deleteAIntoDB)
+router.get('/', auth(USER_ROLE.admin), ServiceController.getAllIntoDB)
 
-export const CategoryRoutes = router
+router.delete(
+  '/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  ServiceController.deleteAIntoDB,
+)
+
+export const ServiceRoutes = router

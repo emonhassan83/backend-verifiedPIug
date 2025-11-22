@@ -1,43 +1,63 @@
 import httpStatus from 'http-status'
-import { TCategory } from './service.interface'
+import { TService } from './service.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { Category } from './service.models'
+import { Service } from './service.models'
 import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
+import { User } from '../user/user.model'
+import { Category } from '../categories/categories.models'
+import { SERVICE_STATUS } from './service.constants'
 
-// Create a new Category
-const insertIntoDB = async (payload: TCategory, file: any) => {
-  // Check for duplicates using collation
-  const isExist = await Category.findOne({
-    title: { $regex: `^${payload.title}$`, $options: 'i' },
-  })
-  if (isExist) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      `Category "${payload.title}" already exists`,
-    )
+// Create a new Service
+const insertIntoDB = async (userId: string, payload: TService, files: any) => {
+  const { category: categoryId } = payload
+
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // upload to service image
-  if (file) {
-    payload.logo = (await uploadToS3({
+  const category = await Category.findById(categoryId)
+  if (!category || category?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Category not found')
+  }
+
+  // Ensure files exist
+  const uploadedFiles = files?.images
+  if (!uploadedFiles || uploadedFiles.length === 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
+  }
+
+  // Upload all images
+  const imageUrls: string[] = []
+
+  for (const file of uploadedFiles) {
+    const uploadedUrl = (await uploadToS3({
       file,
-      fileName: `images/categories/logo/${Math.floor(100000 + Math.random() * 900000)}`,
+      fileName: `images/services/${Date.now()}-${Math.floor(
+        100000 + Math.random() * 900000,
+      )}`,
     })) as string
+
+    imageUrls.push(uploadedUrl)
   }
 
-  const result = await Category.create(payload)
+  // Assign to payload
+  payload.images = imageUrls
+  payload.author = user._id
+
+  const result = await Service.create(payload)
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Category creation failed')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Service creation failed')
   }
 
   return result
 }
 
-// Get all category
+// Get all Service
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const CategoryModel = new QueryBuilder(
-    Category.find({ isDeleted: false }),
+  const ServiceModel = new QueryBuilder(
+    Service.find({ isDeleted: false }),
     query,
   )
     .search(['title'])
@@ -46,59 +66,109 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     .sort()
     .fields()
 
-  const data = await CategoryModel.modelQuery
-  const meta = await CategoryModel.countTotal()
+  const data = await ServiceModel.modelQuery
+  const meta = await ServiceModel.countTotal()
   return {
     data,
     meta,
   }
 }
 
-// Get Category by ID
+// Get Service by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Category.findById(id)
+  const result = await Service.findById(id)
   if (!result || result?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Oops! Category not found')
+    throw new AppError(httpStatus.NOT_FOUND, 'Oops! Service not found')
   }
 
   return result
 }
 
-// Update Category
+// Update Service
 const updateAIntoDB = async (
   id: string,
-  payload: Partial<TCategory>,
-  file: any,
+  payload: Partial<TService>,
+  files: any,
 ) => {
-  const category = await Category.findById(id)
-  if (!category || category?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
+  const service = await Service.findById(id)
+  if (!service || service?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
-  // upload to service image
-  if (file) {
-    payload.logo = (await uploadToS3({
+  // Ensure files exist
+  const uploadedFiles = files?.images
+  if (!uploadedFiles || uploadedFiles.length === 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
+  }
+
+  // Upload all images
+  const imageUrls: string[] = []
+
+  for (const file of uploadedFiles) {
+    const uploadedUrl = (await uploadToS3({
       file,
-      fileName: `images/categories/logo/${Math.floor(100000 + Math.random() * 900000)}`,
+      fileName: `images/services/${Date.now()}-${Math.floor(
+        100000 + Math.random() * 900000,
+      )}`,
     })) as string
+
+    imageUrls.push(uploadedUrl)
   }
 
-  const result = await Category.findByIdAndUpdate(id, payload, {
+  // Assign to payload
+  payload.images = imageUrls
+
+  const result = await Service.findByIdAndUpdate(id, payload, {
     new: true,
   })
   if (!result) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Category record not updated!',
+      'Service record not updated!',
     )
   }
 
   return result
 }
 
-// Delete Category
+const changeStatusFromDB = async (id: string, payload: any) => {
+  const { status } = payload
+
+  const service = await Service.findById(id)
+  if (!service || service?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
+  }
+
+  // Capture old status
+  const oldStatus = service.status
+
+  const result = await Service.findByIdAndUpdate(
+    service._id,
+    { status },
+    { new: true },
+  )
+  if (!result) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'User not found and failed to update status!',
+    )
+  }
+
+  // Update category listing count
+  if (oldStatus !== status && status === SERVICE_STATUS.active) {
+    await Category.findByIdAndUpdate(
+      service.category,
+      { $inc: { listingCount: 1 } },
+      { new: true },
+    )
+  }
+
+  return result
+}
+
+// Delete Service
 const deleteAIntoDB = async (id: string) => {
-  const result = await Category.findByIdAndUpdate(
+  const result = await Service.findByIdAndUpdate(
     id,
     {
       $set: {
@@ -109,16 +179,17 @@ const deleteAIntoDB = async (id: string) => {
   )
 
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Category deletion failed')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Service deletion failed')
   }
 
   return result
 }
 
-export const CategoryService = {
+export const ServiceService = {
   insertIntoDB,
   getAllIntoDB,
   getAIntoDB,
   updateAIntoDB,
+  changeStatusFromDB,
   deleteAIntoDB,
 }
