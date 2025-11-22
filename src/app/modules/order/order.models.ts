@@ -1,0 +1,61 @@
+import { Schema, model, Types } from 'mongoose'
+import { TService, TServiceModel } from './order.interface'
+import { PRICE_TYPE, SERVICE_STATUS } from './order.constants'
+
+const serviceSchema = new Schema<TService>(
+  {
+    author: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    category: {
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
+      required: true,
+    },
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    subtitle: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      required: true,
+    },
+    images: {
+      type: [String],
+      required: true,
+      default: [],
+    },
+    price: {
+      type: Number,
+      required: true,
+    },
+    priceType: {
+      type: String,
+      enum: Object.values(PRICE_TYPE),
+      required: true,
+    },
+    status: {
+      type: String,
+      enum: Object.values(SERVICE_STATUS),
+      default: SERVICE_STATUS.pending,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { timestamps: true }
+)
+
+export const Service = model<TService, TServiceModel>(
+  'Service',
+  serviceSchema
+)

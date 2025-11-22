@@ -1,0 +1,134 @@
+import { Request, Response } from 'express'
+import catchAsync from '../../utils/catchAsync'
+import { ServiceService } from './order.service'
+import sendResponse from '../../utils/sendResponse'
+import { SERVICE_STATUS } from './order.constants'
+
+const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.insertIntoDB(req.user._id, req.body, req.files)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service created successfully',
+    data: result,
+  })
+})
+
+// Get all Service
+const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getActiveServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['status'] = SERVICE_STATUS.active
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Active services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getMyServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['user'] = req.user._id
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'My services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+const getUserServices = catchAsync(async (req: Request, res: Response) => {
+  req.query['user'] = req.params.userId
+  const result = await ServiceService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'User services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
+// Get Service by ID
+const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.getAIntoDB(req.params.id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service retrieved successfully',
+    data: result,
+  })
+})
+
+// Update Service
+const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.updateAIntoDB(
+    req.params.id,
+    req.body,
+    req.file,
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service updated successfully',
+    data: result,
+  })
+})
+
+const changeStatus = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.changeStatusFromDB(
+    req.params.id,
+    req.body
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service status updated successfully',
+    data: result,
+  })
+})
+
+// Delete Service
+const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.deleteAIntoDB(req.params.id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Service deleted successfully',
+    data: result,
+  })
+})
+
+export const ServiceController = {
+  insertIntoDB,
+  getAllIntoDB,
+  getActiveServices,
+  getMyServices,
+  getUserServices,
+  getAIntoDB,
+  updateAIntoDB,
+  changeStatus,
+  deleteAIntoDB,
+}
