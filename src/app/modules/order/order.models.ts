@@ -1,61 +1,87 @@
 import { Schema, model, Types } from 'mongoose'
-import { TService, TServiceModel } from './order.interface'
-import { PRICE_TYPE, SERVICE_STATUS } from './order.constants'
+import { TOrder, TOrderModel } from './order.interface'
+import { DURATION_TYPE, ORDER_STATUS, ORDER_TYPE } from './order.constants'
 
-const serviceSchema = new Schema<TService>(
+const orderSchema = new Schema<TOrder>(
   {
     author: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
-    category: {
+
+    receiver: {
       type: Schema.Types.ObjectId,
-      ref: 'Category',
+      ref: 'User',
       required: true,
     },
+
+    project: {
+      type: Schema.Types.ObjectId,
+      ref: 'Project',
+      required: true,
+    },
+
     title: {
       type: String,
       required: true,
       trim: true,
     },
-    subtitle: {
+
+    type: {
       type: String,
+      enum: Object.keys(ORDER_TYPE),
       required: true,
-      trim: true,
     },
+
     description: {
       type: String,
       required: true,
     },
-    images: {
-      type: [String],
-      required: true,
-      default: [],
-    },
-    price: {
+
+    duration: {
       type: Number,
       required: true,
     },
-    priceType: {
+
+    durationType: {
       type: String,
-      enum: Object.values(PRICE_TYPE),
+      enum: Object.keys(DURATION_TYPE),
       required: true,
     },
+
+    amount: {
+      type: Number,
+      required: true,
+    },
+
+    startDate: {
+      type: String,
+      required: true,
+    },
+
+    endDate: {
+      type: String,
+      required: true,
+    },
+
+    location: {
+      type: String,
+      required: true,
+    },
+
     status: {
       type: String,
-      enum: Object.values(SERVICE_STATUS),
-      default: SERVICE_STATUS.pending,
+      enum: Object.keys(ORDER_STATUS),
+      default: ORDER_STATUS.pending,
     },
+
     isDeleted: {
       type: Boolean,
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 )
 
-export const Service = model<TService, TServiceModel>(
-  'Service',
-  serviceSchema
-)
+export const Order = model<TOrder, TOrderModel>('Order', orderSchema)
