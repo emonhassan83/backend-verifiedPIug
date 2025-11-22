@@ -141,6 +141,10 @@ const userSchema = new Schema<TUser>(
         return expireAt.setMinutes(expireAt.getMinutes() + 30)
       },
     },
+    balance: {
+      type: Number,
+      default: 0
+    },
     isNotify: {
       type: Boolean,
       default: true,

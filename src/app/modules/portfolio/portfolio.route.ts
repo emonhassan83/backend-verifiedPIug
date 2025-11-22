@@ -17,7 +17,7 @@ router.post(
   PortfolioController.insertIntoDB,
 )
 
-router.get('/:userId', PortfolioController.getUsersPortfolio)
+router.get('/user/:userId', PortfolioController.getUsersPortfolio)
 
 router.get('/', PortfolioController.getAllIntoDB)
 

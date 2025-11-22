@@ -25,8 +25,6 @@ router.delete('/:id', auth(USER_ROLE.admin), FaqControllers.deleteAFaq)
 
 router.get('/', FaqControllers.getAllFaqs)
 
-router.get('/', FaqControllers.getCategoriesFaqs)
-
 router.get('/:id', FaqControllers.getAFaq)
 
 export const FaqRoutes = router

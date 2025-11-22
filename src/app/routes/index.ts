@@ -9,6 +9,7 @@ import { BannerRoutes } from '../modules/banner/banner.route'
 import { FaqRoutes } from '../modules/faq/faq.route'
 import { VerificationRoutes } from '../modules/verification/verification.route'
 import { PortfolioRoutes } from '../modules/portfolio/portfolio.route'
+import { ServiceRoutes } from '../modules/service/service.route'
 
 const router = Router()
 
@@ -44,6 +45,10 @@ const moduleRoutes = [
   {
     path: '/faq',
     route: FaqRoutes,
+  },
+  {
+    path: '/services',
+    route: ServiceRoutes,
   },
   {
     path: '/contents',
