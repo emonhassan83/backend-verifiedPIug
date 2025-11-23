@@ -14,6 +14,7 @@ import { OrderRoutes } from '../modules/order/order.route'
 import { ProjectRoutes } from '../modules/project/project.route'
 import { AssignProjectRoutes } from '../modules/assignProject/assignProject.route'
 import { TaskRoutes } from '../modules/task/task.route'
+import { FileRoutes } from '../modules/fileUpload/fileUpload.route'
 
 const router = Router()
 
@@ -69,6 +70,10 @@ const moduleRoutes = [
   {
     path: '/tasks',
     route: TaskRoutes,
+  },
+  {
+    path: '/files',
+    route: FileRoutes,
   },
   {
     path: '/contents',
