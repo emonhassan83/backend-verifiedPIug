@@ -9,73 +9,60 @@ const orderSchema = new Schema<TOrder>(
       ref: 'User',
       required: true,
     },
-
     receiver: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
-
     project: {
       type: Schema.Types.ObjectId,
       ref: 'Project',
-      required: true,
+      required: false,
     },
-
     title: {
       type: String,
       required: true,
       trim: true,
     },
-
     type: {
       type: String,
       enum: Object.keys(ORDER_TYPE),
       required: true,
     },
-
     description: {
       type: String,
       required: true,
     },
-
     duration: {
       type: Number,
       required: true,
     },
-
     durationType: {
       type: String,
       enum: Object.keys(DURATION_TYPE),
       required: true,
     },
-
     amount: {
       type: Number,
       required: true,
     },
-
     startDate: {
       type: String,
       required: true,
     },
-
     endDate: {
       type: String,
       required: true,
     },
-
     location: {
       type: String,
       required: true,
     },
-
     status: {
       type: String,
       enum: Object.keys(ORDER_STATUS),
       default: ORDER_STATUS.pending,
     },
-
     isDeleted: {
       type: Boolean,
       default: false,

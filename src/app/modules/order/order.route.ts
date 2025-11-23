@@ -1,57 +1,54 @@
 import { Router } from 'express'
-import { ServiceController } from './order.controller'
+import { OrderController } from './order.controller'
 import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import zodValidationRequest from '../../middleware/validateRequest'
-import { ServiceValidation } from './order.validation'
-import multer, { memoryStorage } from 'multer'
-import parseData from '../../middleware/parseData'
+import { OrderValidation } from './order.validation'
 
 const router = Router()
-const storage = memoryStorage()
-const upload = multer({ storage })
 
 router.post(
   '/',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  upload.fields([{ name: 'files', maxCount: 10 }]),
-  parseData(),
-  zodValidationRequest(ServiceValidation.createValidationSchema),
-  ServiceController.insertIntoDB,
+  auth(USER_ROLE.planer, USER_ROLE.user),
+  zodValidationRequest(OrderValidation.createValidationSchema),
+  OrderController.insertIntoDB,
 )
 
 router.patch(
   '/status/:id',
   auth(USER_ROLE.admin),
-  zodValidationRequest(ServiceValidation.changeStatusValidationSchema),
-  ServiceController.changeStatus,
+  zodValidationRequest(OrderValidation.changeStatusValidationSchema),
+  OrderController.changeStatus,
 )
 
 router.put(
   '/:id',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  upload.fields([{ name: 'files', maxCount: 10 }]),
-  parseData(),
-  zodValidationRequest(ServiceValidation.updateValidationSchema),
-  ServiceController.updateAIntoDB,
+  auth(USER_ROLE.planer, USER_ROLE.user),
+  zodValidationRequest(OrderValidation.updateValidationSchema),
+  OrderController.updateAIntoDB,
 )
 
-router.get('/active', ServiceController.getActiveServices)
 router.get(
-  '/my-services',
+  '/my-orders',
+  auth(USER_ROLE.planer, USER_ROLE.user),
+  OrderController.getMyOrder,
+)
+router.get(
+  '/receiver-order',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
-  ServiceController.getMyServices,
+  OrderController.getReceiverOrder,
 )
 
-router.get('/user/:userId', ServiceController.getUserServices)
-router.get('/:id', ServiceController.getAIntoDB)
-
-router.get('/', auth(USER_ROLE.admin), ServiceController.getAllIntoDB)
+router.get(
+  '/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user, USER_ROLE.admin),
+  OrderController.getAIntoDB,
+)
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  ServiceController.deleteAIntoDB,
+  auth(USER_ROLE.planer, USER_ROLE.user),
+  OrderController.deleteAIntoDB,
 )
 
-export const ServiceRoutes = router
+export const OrderRoutes = router
