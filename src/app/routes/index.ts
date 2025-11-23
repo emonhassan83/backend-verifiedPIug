@@ -13,6 +13,7 @@ import { ServiceRoutes } from '../modules/service/service.route'
 import { OrderRoutes } from '../modules/order/order.route'
 import { ProjectRoutes } from '../modules/project/project.route'
 import { AssignProjectRoutes } from '../modules/assignProject/assignProject.route'
+import { TaskRoutes } from '../modules/task/task.route'
 
 const router = Router()
 
@@ -64,6 +65,10 @@ const moduleRoutes = [
   {
     path: '/assign-projects',
     route: AssignProjectRoutes,
+  },
+  {
+    path: '/tasks',
+    route: TaskRoutes,
   },
   {
     path: '/contents',
