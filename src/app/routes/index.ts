@@ -19,6 +19,7 @@ import { ChatRoutes } from '../modules/chat/chat.route'
 import { MessagesRoutes } from '../modules/messages/messages.route'
 import { ReviewsRoutes } from '../modules/review/review.route'
 import { FavoriteRoutes } from '../modules/favorite/favorite.route'
+import { SearchHistoryRoutes } from '../modules/searchHistory/searchHistory.route'
 
 const router = Router()
 
@@ -58,6 +59,10 @@ const moduleRoutes = [
   {
     path: '/services',
     route: ServiceRoutes,
+  },
+  {
+    path: '/search-histories',
+    route: SearchHistoryRoutes,
   },
   {
     path: '/orders',
