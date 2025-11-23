@@ -17,6 +17,7 @@ import { TaskRoutes } from '../modules/task/task.route'
 import { FileRoutes } from '../modules/fileUpload/fileUpload.route'
 import { ChatRoutes } from '../modules/chat/chat.route'
 import { MessagesRoutes } from '../modules/messages/messages.route'
+import { ReviewsRoutes } from '../modules/review/review.route'
 
 const router = Router()
 
@@ -84,6 +85,10 @@ const moduleRoutes = [
   {
     path: '/messages',
     route: MessagesRoutes,
+  },
+  {
+    path: '/reviews',
+    route: ReviewsRoutes,
   },
   {
     path: '/contents',
