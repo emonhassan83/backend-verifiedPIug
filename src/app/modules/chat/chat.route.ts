@@ -1,0 +1,48 @@
+import { Router } from 'express'
+import { chatController } from './chat.controller'
+import validateRequest from '../../middleware/validateRequest'
+import { ChatValidation } from './chat.validation'
+import auth from '../../middleware/auth'
+import { USER_ROLE } from '../user/user.constant'
+
+const router = Router()
+
+router.post(
+  '/',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  validateRequest(ChatValidation.createValidation),
+  chatController.createChat,
+)
+
+router.put(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  validateRequest(ChatValidation.updateValidation),
+  chatController.updateChat,
+)
+
+router.delete(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  chatController.deleteChat,
+)
+
+router.get(
+  '/project/:userId',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  chatController.getChatByUserId,
+)
+
+router.get(
+  '/my-chat-list',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  chatController.getMyChatList,
+)
+
+router.get(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.user),
+  chatController.getChatById,
+)
+
+export const ChatRoutes = router

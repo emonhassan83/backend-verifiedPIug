@@ -16,10 +16,7 @@ const insertIntoDB = async (userId: string, payload: TProject) => {
 
   const order = await Order.findById(orderId)
   if (!order || order?.isDeleted) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'Order data not found',
-    )
+    throw new AppError(httpStatus.NOT_FOUND, 'Order data not found')
   }
 
   // Assign to payload
@@ -35,7 +32,7 @@ const insertIntoDB = async (userId: string, payload: TProject) => {
 
 // Get Project by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Project.findById(id)
+  const result = await Project.findOne({ order: id })
   if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Project not found')
   }

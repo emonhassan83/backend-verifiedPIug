@@ -17,7 +17,7 @@ router.post(
   FileController.insertIntoDB,
 )
 
-router.get('/project/:projectId', FileController.getAllIntoDB)
+router.get('/:projectId', FileController.getAllIntoDB)
 
 router.delete('/:id', auth(USER_ROLE.admin), FileController.deleteAIntoDB)
 

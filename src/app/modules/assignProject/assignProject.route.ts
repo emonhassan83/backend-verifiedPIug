@@ -15,7 +15,7 @@ router.post(
 )
 
 router.put(
-  ':id',
+  '/:id',
   auth(USER_ROLE.planer),
   zodValidationRequest(AssignProjectValidation.updateValidationSchema),
   AssignProjectController.updateIntoDB,

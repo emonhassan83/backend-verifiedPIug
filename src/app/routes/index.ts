@@ -15,6 +15,7 @@ import { ProjectRoutes } from '../modules/project/project.route'
 import { AssignProjectRoutes } from '../modules/assignProject/assignProject.route'
 import { TaskRoutes } from '../modules/task/task.route'
 import { FileRoutes } from '../modules/fileUpload/fileUpload.route'
+import { ChatRoutes } from '../modules/chat/chat.route'
 
 const router = Router()
 
@@ -74,6 +75,10 @@ const moduleRoutes = [
   {
     path: '/files',
     route: FileRoutes,
+  },
+  {
+    path: '/chats',
+    route: ChatRoutes,
   },
   {
     path: '/contents',
