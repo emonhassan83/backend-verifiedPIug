@@ -11,6 +11,7 @@ import { VerificationRoutes } from '../modules/verification/verification.route'
 import { PortfolioRoutes } from '../modules/portfolio/portfolio.route'
 import { ServiceRoutes } from '../modules/service/service.route'
 import { OrderRoutes } from '../modules/order/order.route'
+import { ProjectRoutes } from '../modules/project/project.route'
 
 const router = Router()
 
@@ -54,6 +55,10 @@ const moduleRoutes = [
   {
     path: '/orders',
     route: OrderRoutes,
+  },
+  {
+    path: '/orders',
+    route: ProjectRoutes,
   },
   {
     path: '/contents',
