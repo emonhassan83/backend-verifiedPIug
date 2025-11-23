@@ -1,31 +1,19 @@
 import httpStatus from 'http-status'
-import { REVIEW_MODEL_TYPE, TReviews } from './review.interface'
+import { TReviews } from './review.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { getAverageRating } from './review.utils'
 import { ClientSession, startSession } from 'mongoose'
 import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
-import { Car } from '../car/car.model'
 import { User } from '../user/user.model'
+import { Order } from '../order/order.models'
 
 const createReviews = async (payload: TReviews) => {
-    const { modelType, reference } = payload;
+  const { order: orderId } = payload
 
-  const modelMap = {
-    [REVIEW_MODEL_TYPE.User]: User,
-    [REVIEW_MODEL_TYPE.Car]: Car,
-  } as const;
-
-if (!Object.values(REVIEW_MODEL_TYPE).includes(modelType as REVIEW_MODEL_TYPE)) {
-  throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type!');
-}
-
-const model = modelMap[modelType as REVIEW_MODEL_TYPE];
-
-  // @ts-ignore
-  const parentDoc = await model.findById(reference);
-  if (!parentDoc || parentDoc?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, `${modelType} not found!`);
+  const order = await Order.findById(orderId)
+  if (!order || order?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, `Order not found!`)
   }
 
   const session: ClientSession = await startSession()
@@ -40,39 +28,22 @@ const model = modelMap[modelType as REVIEW_MODEL_TYPE];
 
     // Calculate the new average rating
     const { averageRating, totalReviews } = await getAverageRating(
-      result[0]?.reference?.toString(),
+      result[0]?.order?.toString(),
     )
 
     const newAvgRating =
-      (Number(averageRating) * Number(totalReviews) + Number(payload.rating)) /
+      (Number(averageRating) * Number(totalReviews) +
+        Number(payload.overallRating)) /
       (totalReviews + 1)
 
-    switch (payload.modelType) {
-      case REVIEW_MODEL_TYPE.User: {
-        await User.findByIdAndUpdate(
-          result[0].reference,
-          {
-            avgRating: newAvgRating.toFixed(2),
-            $addToSet: { reviews: result[0]?._id },
-          },
-          { session },
-        )
-        break
-      }
-      case REVIEW_MODEL_TYPE.Car: {
-        await Car.findByIdAndUpdate(
-          result[0]?.reference,
-          {
-            avgRating: newAvgRating.toFixed(2),
-            $addToSet: { reviews: result[0]?._id },
-          },
-          { session },
-        )
-        break
-      }
-      default:
-        throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type')
-    }
+    await User.findByIdAndUpdate(
+      result[0].author,
+      {
+        avgRating: newAvgRating.toFixed(2),
+        $addToSet: { reviews: result[0]?._id },
+      },
+      { session },
+    )
 
     await session.commitTransaction()
     session.endSession()
@@ -110,7 +81,7 @@ const getAllReviews = async (query: Record<string, any>) => {
 
 const getReviewsById = async (id: string) => {
   const result = await Reviews.findById(id).populate([
-    { path: 'reference' },
+    { path: 'order' },
     { path: 'user', select: 'name email photoUrl' },
   ])
   if (!result) {

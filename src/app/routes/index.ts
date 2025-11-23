@@ -18,6 +18,7 @@ import { FileRoutes } from '../modules/fileUpload/fileUpload.route'
 import { ChatRoutes } from '../modules/chat/chat.route'
 import { MessagesRoutes } from '../modules/messages/messages.route'
 import { ReviewsRoutes } from '../modules/review/review.route'
+import { FavoriteRoutes } from '../modules/favorite/favorite.route'
 
 const router = Router()
 
@@ -89,6 +90,10 @@ const moduleRoutes = [
   {
     path: '/reviews',
     route: ReviewsRoutes,
+  },
+  {
+    path: '/favorites',
+    route: FavoriteRoutes,
   },
   {
     path: '/contents',
