@@ -40,7 +40,14 @@ export interface TUser {
   ratingCount: number
   balance: number
   expireAt: Date
-  isNotify: boolean
+  notifySettings: {
+    all: boolean
+    profile: boolean
+    service: boolean
+    bookings: boolean
+    subscription: boolean
+    payment: boolean
+  }
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

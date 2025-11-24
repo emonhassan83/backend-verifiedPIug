@@ -143,11 +143,33 @@ const userSchema = new Schema<TUser>(
     },
     balance: {
       type: Number,
-      default: 0
+      default: 0,
     },
-    isNotify: {
-      type: Boolean,
-      default: true,
+    notifySettings: {
+      all: {
+        type: Boolean,
+        default: true, // master switch
+      },
+      profile: {
+        type: Boolean,
+        default: false,
+      },
+      service: {
+        type: Boolean,
+        default: false,
+      },
+      bookings: {
+        type: Boolean,
+        default: false,
+      },
+      subscription: {
+        type: Boolean,
+        default: false,
+      },
+      payment: {
+        type: Boolean,
+        default: false,
+      },
     },
     isDeleted: {
       type: Boolean,

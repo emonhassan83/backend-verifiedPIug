@@ -112,27 +112,63 @@ const changeUserStatusFromDB = async (payload: any) => {
   return updateUserStatus
 }
 
-const changeUserNotifyFromDB = async (id: string) => {
-  //* if the user is is not exist
-  const user = await User.findById(id)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+const updateNotifySettings = async (id: string, payload: Partial<TUser['notifySettings']>) => {
+  const user = await User.findById(id);
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
   }
 
-  const updateNotify = await User.findByIdAndUpdate(
+  // Current settings
+  const current = user.notifySettings;
+
+  // Merge incoming fields with current state
+  const updated = { ...current, ...payload };
+
+  // BUSINESS LOGIC RULES
+
+  // CASE 1: Client enables "all"
+  if (payload.all === true) {
+    updated.all = true;
+    updated.profile = true;
+    updated.service = true;
+    updated.bookings = true;
+    updated.subscription = true;
+    updated.payment = true;
+  }
+
+  // CASE 2: Client disables a specific item (e.g. profile = false)
+  // → all must be disabled
+  const anyDisabled =
+    !updated.profile ||
+    !updated.service ||
+    !updated.bookings ||
+    !updated.subscription ||
+    !updated.payment;
+
+  if (anyDisabled) {
+    updated.all = false;
+  }
+
+  // CASE 3: If everything is true except ALL
+  const allTrue =
+    updated.profile &&
+    updated.service &&
+    updated.bookings &&
+    updated.subscription &&
+    updated.payment;
+
+  if (allTrue) {
+    updated.all = true;
+  }
+
+  const result = await User.findByIdAndUpdate(
     id,
-    { isNotify: !user.isNotify },
-    { new: true },
-  ).select('_id id name email photoUrl status isNotify')
-  if (!updateNotify) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'User not found and failed to update status!',
-    )
-  }
+    { notifySettings: updated },
+    { new: true }
+  ).select('_id id name email notifySettings');
 
-  return updateNotify
-}
+  return result;
+};
 
 const updateUserInfoFromDB = async (
   userId: string,
@@ -219,7 +255,7 @@ export const UserService = {
   getAllUsersFromDB,
   geUserByIdFromDB,
   changeUserStatusFromDB,
-  changeUserNotifyFromDB,
+  updateNotifySettings,
   updateUserInfoFromDB,
   updateLocationFromDB,
   deleteAUserFromDB,

@@ -12,6 +12,7 @@ export interface TOrder {
   duration: number
   durationType: TDurationType
   amount: number
+  initialPayment: number
   startDate: string
   endDate: string
   location: string

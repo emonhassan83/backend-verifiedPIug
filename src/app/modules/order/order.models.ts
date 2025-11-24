@@ -46,6 +46,10 @@ const orderSchema = new Schema<TOrder>(
       type: Number,
       required: true,
     },
+    initialPayment: {
+      type: Number,
+      default: 0,
+    },
     startDate: {
       type: String,
       required: true,

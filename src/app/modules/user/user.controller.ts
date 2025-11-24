@@ -71,7 +71,7 @@ const changeUserStatus = catchAsync(async (req, res) => {
 })
 
 const changeUserNotify = catchAsync(async (req, res) => {
-  const result = await UserService.changeUserNotifyFromDB(req.user._id)
+  const result = await UserService.updateNotifySettings(req.user._id, req.body)
 
   sendResponse(res, {
     success: true,
