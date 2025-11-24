@@ -21,6 +21,7 @@ import { ReviewsRoutes } from '../modules/review/review.route'
 import { FavoriteRoutes } from '../modules/favorite/favorite.route'
 import { SearchHistoryRoutes } from '../modules/searchHistory/searchHistory.route'
 import { PackageRoutes } from '../modules/package/package.route'
+import { SubscriptionRoutes } from '../modules/subscription/subscription.route'
 
 const router = Router()
 
@@ -104,6 +105,10 @@ const moduleRoutes = [
   {
     path: '/packages',
     route: PackageRoutes,
+  },
+  {
+    path: '/subscriptions',
+    route: SubscriptionRoutes,
   },
   {
     path: '/contents',
