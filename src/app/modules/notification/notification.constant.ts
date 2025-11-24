@@ -27,11 +27,14 @@ export const messages = {
 
   subscription: {
     newPlan: 'New subscription plan added.',
+    cancelled: 'Plan canceled !',
     warningForPlan: "Alert for add new plan"
   },
 
   paymentManagement: {
     paymentSuccess: 'Payment was successful!',
     paymentRefunded: 'Payment refunded successfully.',
+        paymentFailed: 'Payment failed !',
+    upcomingCharge: 'You’re upcoming charge ready!',
   },
 }

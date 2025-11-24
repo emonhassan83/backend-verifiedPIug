@@ -26,6 +26,10 @@ export default {
     stripe_api_key: process.env.STRIPE_API_KEY,
     stripe_api_secret: process.env.STRIPE_API_SECRET,
   },
+  paystack: {
+    public_key: process.env.PAYSTACK_PUBLIC_KEY,
+    secret_key: process.env.PAYSTACK_SECRET_KEY,
+  },
   payment_success_url: process.env.PAYMENT_SUCCESS_URL,
   payment_cancel_url: process.env.PAYMENT_CANCEL_URL,
   aws: {

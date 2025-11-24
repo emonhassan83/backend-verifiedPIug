@@ -271,13 +271,13 @@ const cancelSubscription = async (subscriptionId: string, userId: string) => {
   console.log({ updatedSubscription })
 
   // Notify user
-  // await NotificationService.createNotificationIntoDB({
-  //   receiver: userId,
-  //   message: messages.subscription.cancelled,
-  //   description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
-  //   reference: subscriptionId,
-  //   model_type: modeType.Subscription,
-  // })
+  await NotificationService.createNotificationIntoDB({
+    receiver: userId,
+    message: messages.subscription.cancelled,
+    description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
+    reference: subscriptionId,
+    model_type: modeType.Subscription,
+  })
 
   return updatedSubscription
 }
@@ -332,13 +332,13 @@ const enableSubscription = async (subscriptionId: string, userId: string) => {
   )
 
   // Notify user
-  // await NotificationService.createNotificationIntoDB({
-  //   receiver: userId,
-  //   message: messages.subscription.cancelled,
-  //   description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
-  //   reference: subscriptionId,
-  //   model_type: modeType.Subscription,
-  // })
+  await NotificationService.createNotificationIntoDB({
+    receiver: userId,
+    message: messages.subscription.cancelled,
+    description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
+    reference: subscriptionId,
+    model_type: modeType.Subscription,
+  })
 
   return updatedSubscription
 }

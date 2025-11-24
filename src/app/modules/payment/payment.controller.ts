@@ -86,15 +86,13 @@ const getAPaymentByReferenceId = catchAsync(async (req, res) => {
 })
 
 const getDashboardData = catchAsync(async (req, res) => {
-  const payments = await PaymentService.getDashboardDataFromDB(req.query)
-  const { meta, data } = payments
+  const result = await PaymentService.getDashboardDataFromDB(req.query)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'Payments retrieved successfully!',
-    meta,
-    data,
+    data: result,
   })
 })
 

@@ -1,17 +1,17 @@
 import config from '../../config'
-import { messages } from '../Notification/notification.constant'
-import { modeType } from '../Notification/notification.interface'
+import { messages } from '../notification/notification.constant'
+import { modeType } from '../notification/notification.interface'
 import { TPayment } from './payment.interface'
-import { NotificationService } from '../Notification/notification.service'
+import { NotificationService } from '../notification/notification.service'
 import { findAdmin } from '../../utils/findAdmin'
 //@ts-ignore
 import Paystack from 'paystack-api'
 import axios from 'axios'
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
-import { User } from '../User/user.model'
-import { Package } from '../Package/package.model'
-import { Subscription } from '../Subscription/subscription.models'
+import { User } from '../user/user.model'
+import { Package } from '../package/package.model'
+import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { Types } from 'mongoose'
 import crypto from 'crypto'
@@ -351,7 +351,7 @@ export const handlePaystackWebhook = async (req: any) => {
         })
 
         await NotificationService.createNotificationIntoDB({
-          receiver: payment.account,
+          receiver: payment.user,
           message: messages.paymentManagement.paymentRefunded,
           description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
           reference: payment._id,
@@ -783,7 +783,7 @@ export const paymentNotifyToUser = async (
 
   // Create a notification entry
   await NotificationService.createNotificationIntoDB({
-    receiver: payment?.account,
+    receiver: payment?.user,
     message,
     description,
     reference: payment.reference,
