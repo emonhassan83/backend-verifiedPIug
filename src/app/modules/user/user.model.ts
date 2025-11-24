@@ -126,6 +126,9 @@ const userSchema = new Schema<TUser>(
       type: Date,
       default: null,
     },
+    playstackId: {
+      type: String
+    },
     avgRating: {
       type: Number,
       default: 0,

@@ -22,6 +22,7 @@ import { FavoriteRoutes } from '../modules/favorite/favorite.route'
 import { SearchHistoryRoutes } from '../modules/searchHistory/searchHistory.route'
 import { PackageRoutes } from '../modules/package/package.route'
 import { SubscriptionRoutes } from '../modules/subscription/subscription.route'
+import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 
 const router = Router()
 
@@ -109,6 +110,10 @@ const moduleRoutes = [
   {
     path: '/subscriptions',
     route: SubscriptionRoutes,
+  },
+  {
+    path: '/withdraw',
+    route: WithdrawRoutes,
   },
   {
     path: '/contents',
