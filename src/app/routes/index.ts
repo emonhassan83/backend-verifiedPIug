@@ -23,6 +23,7 @@ import { SearchHistoryRoutes } from '../modules/searchHistory/searchHistory.rout
 import { PackageRoutes } from '../modules/package/package.route'
 import { SubscriptionRoutes } from '../modules/subscription/subscription.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
+import { PaymentRoutes } from '../modules/payment/payment.route'
 
 const router = Router()
 
@@ -110,6 +111,10 @@ const moduleRoutes = [
   {
     path: '/subscriptions',
     route: SubscriptionRoutes,
+  },
+  {
+    path: '/payments',
+    route: PaymentRoutes,
   },
   {
     path: '/withdraw',

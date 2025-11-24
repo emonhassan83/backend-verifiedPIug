@@ -6,10 +6,7 @@ import { TSubscriptions } from './subscription.interface'
 import { Package } from '../package/package.model'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
-import {
-  subscriptionNotifyToAdmin,
-  subscriptionNotifyToUser,
-} from './subscription.utils'
+import { subscriptionNotifyToUser } from './subscription.utils'
 import { Subscription } from './subscription.models'
 import { PAYMENT_STATUS } from './subscription.constants'
 
@@ -94,8 +91,8 @@ const createSubscription = async (payload: TSubscriptions) => {
       throw new AppError(httpStatus.BAD_REQUEST, 'Package not found')
     }
 
-      // Not a valid verified student
-      payload.amount = packages.price
+    // Not a valid verified student
+    payload.amount = packages.price
 
     // Determine the expiration date based on billing cycle
     let expiredAt
@@ -147,7 +144,7 @@ const createSubscription = async (payload: TSubscriptions) => {
 
 const getAllSubscription = async (query: Record<string, any>) => {
   const subscriptionsModel = new QueryBuilder(
-    Subscription.find({isDeleted: false, isExpired: false}).populate([
+    Subscription.find({ isDeleted: false, isExpired: false }).populate([
       {
         path: 'package',
         select: '',
