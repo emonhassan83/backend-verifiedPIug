@@ -20,6 +20,7 @@ import { MessagesRoutes } from '../modules/messages/messages.route'
 import { ReviewsRoutes } from '../modules/review/review.route'
 import { FavoriteRoutes } from '../modules/favorite/favorite.route'
 import { SearchHistoryRoutes } from '../modules/searchHistory/searchHistory.route'
+import { PackageRoutes } from '../modules/package/package.route'
 
 const router = Router()
 
@@ -99,6 +100,10 @@ const moduleRoutes = [
   {
     path: '/favorites',
     route: FavoriteRoutes,
+  },
+  {
+    path: '/packages',
+    route: PackageRoutes,
   },
   {
     path: '/contents',
