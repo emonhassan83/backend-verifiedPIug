@@ -5,7 +5,7 @@ import { TWithdraw } from './withdraw.interface'
 import { Withdraw } from './withdraw.model'
 import { User } from '../user/user.model'
 // @ts-ignore
-import StripeService from '../../class/stripe/stripe'
+// import StripeService from '../../class/stripe/stripe'
 
 const createWithdrawIntoDB = async (payload: TWithdraw) => {
   const { user: userId, amount } = payload
@@ -36,10 +36,12 @@ const createWithdrawIntoDB = async (payload: TWithdraw) => {
   // 4. Attempt transfer via Stripe
   let stripeTransfer: any
   try {
-    stripeTransfer = await StripeService.transfer(
-      Math.round(amount), // in cents if you're using USD
-      user.playstackId,
-    )
+    // !TODO: Enable Stripe Transfer when in production
+    
+    // stripeTransfer = await StripeService.transfer(
+    //   Math.round(amount), // in cents if you're using USD
+    //   user.playstackId,
+    // )
   } catch (error: any) {
     console.error('❌ Stripe Transfer Failed:', error.message)
     throw new AppError(

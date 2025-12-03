@@ -5,6 +5,7 @@ import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
 import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
+import { startSubscriptionCron } from './app/modules/subscription/subscription.service'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -18,7 +19,7 @@ async function main() {
     // default task added
     seeder.seedAdmin()
     seeder.seedContents()
-    // startSubscriptionCron();
+    startSubscriptionCron();
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(`app is listening on port ${config.port}`)
