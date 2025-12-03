@@ -1,6 +1,14 @@
 import { z } from 'zod'
 import { USER_STATUS } from './user.constant'
 
+const socialProfilesZodSchema = z
+  .object({
+    instagram: z.string().url().optional().nullable(),
+    linkedin: z.string().url().optional().nullable(),
+    website: z.string().url().optional().nullable(),
+  })
+  .optional()
+
 // Define the Zod validation schema
 const createValidationSchema = z.object({
   body: z.object({
@@ -21,7 +29,7 @@ const createValidationSchema = z.object({
         invalid_type_error: 'Password must be a string',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(16, { message: 'Password cannot be more than 16 characters' })
+      .max(16, { message: 'Password cannot be more than 16 characters' }),
   }),
 })
 
@@ -37,24 +45,9 @@ const updateValidationSchema = z.object({
         required_error: 'contractNumber is required!',
       })
       .optional(),
-    address: z
-      .string({
-        required_error: 'address is required!',
-      })
-      .optional(),
-    country: z
-      .string({
-        required_error: 'country is required!',
-      })
-      .optional(),
-    city: z
-      .string({
-        required_error: 'city is required!',
-      })
-      .optional(),
-    locationUrl: z
-      .string({
-        required_error: 'locationUrl is required!',
+    longitude: z
+      .number({
+        required_error: 'longitude is required!',
       })
       .optional(),
     latitude: z
@@ -62,11 +55,24 @@ const updateValidationSchema = z.object({
         required_error: 'latitude is required!',
       })
       .optional(),
-    longitude: z
-      .number({
-        required_error: 'longitude is required!',
+    address: z
+      .string({
+        required_error: 'address is required!',
       })
       .optional(),
+    bio: z
+      .string({
+        required_error: 'Bio is required!',
+      })
+      .optional(),
+    categories: z
+      .array(
+        z.string({
+          required_error: 'categoryIds is required!',
+        }),
+      )
+      .optional(),
+    socialProfiles: socialProfilesZodSchema,
   }),
 })
 
@@ -96,5 +102,5 @@ export const UserValidation = {
   createValidationSchema,
   updateValidationSchema,
   changeStatusValidationSchema,
-  updateLocationValidationSchema
+  updateLocationValidationSchema,
 }

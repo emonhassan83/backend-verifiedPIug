@@ -5,7 +5,7 @@ import { Verification } from './verification.models'
 import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
-import { TKycStatus } from './verification.constants'
+import { KYC_STATUS, TKycStatus } from './verification.constants'
 
 // Create a new Verification
 const insertIntoDB = async (
@@ -113,6 +113,15 @@ const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
       httpStatus.INTERNAL_SERVER_ERROR,
       'Verification record not updated!',
     )
+  }
+
+  // here update user kyc status
+  if (status === KYC_STATUS.approved) {
+ await User.findByIdAndUpdate(
+      verification.user, // reference to the user
+      { isKycVerified: true },
+      { new: true }
+    );
   }
 
   return result
