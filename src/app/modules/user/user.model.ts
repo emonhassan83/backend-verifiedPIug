@@ -174,6 +174,10 @@ const userSchema = new Schema<TUser>(
         default: false,
       },
     },
+    isKycVerified: {
+      type: Boolean,
+      default: false,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

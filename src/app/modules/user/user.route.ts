@@ -13,13 +13,15 @@ const upload = multer({ storage })
 
 router.post(
   '/register',
+  upload.single('image'),
+  parseData(),
   zodValidationRequest(UserValidation.createValidationSchema),
   UserControllers.registerUser,
 )
 
 router.patch(
   '/change-notify',
-  auth(USER_ROLE.vendor, USER_ROLE.planer, USER_ROLE.user),
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   UserControllers.changeUserNotify,
 )
 
@@ -32,7 +34,7 @@ router.patch(
 
 router.patch(
   '/update-location',
-  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.user),
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   zodValidationRequest(UserValidation.updateLocationValidationSchema),
   UserControllers.updateLocation,
 )
@@ -56,13 +58,13 @@ router.put(
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   UserControllers.deleteAUser,
 )
 
 router.get(
   '/my-profile',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   UserControllers.getMyProfile,
 )
 

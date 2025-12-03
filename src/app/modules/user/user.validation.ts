@@ -15,7 +15,13 @@ const createValidationSchema = z.object({
         invalid_type_error: 'Password must be a string',
       })
       .min(6, { message: 'Password must be at least 6 characters' })
-      .max(12, { message: 'Password cannot be more than 12 characters' })
+      .max(16, { message: 'Password cannot be more than 16 characters' }),
+    confirmPassword: z
+      .string({
+        invalid_type_error: 'Password must be a string',
+      })
+      .min(6, { message: 'Password must be at least 6 characters' })
+      .max(16, { message: 'Password cannot be more than 16 characters' })
   }),
 })
 

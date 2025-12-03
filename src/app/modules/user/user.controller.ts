@@ -8,6 +8,13 @@ import { otpServices } from '../otp/otp.service'
 import { USER_ROLE } from './user.constant'
 
 const registerUser = catchAsync(async (req, res) => {
+  if (req?.file) {
+    req.body.photoUrl = await uploadToS3({
+      file: req.file,
+      fileName: `images/user/photoUrl/${Math.floor(100000 + Math.random() * 900000)}`,
+    })
+  }
+
   const result = await UserService.registerUserIntoDB(req?.body)
   const sendOtp = await otpServices.resendOtp(result?.email)
   const { _id, id, name, email, status } = result

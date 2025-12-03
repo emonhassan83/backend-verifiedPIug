@@ -13,6 +13,7 @@ export interface TUser {
   name: string
   email: string
   password: string
+  confirmPassword?: string
   fcmToken: string
   photoUrl?: string
   contractNumber?: string
@@ -49,6 +50,7 @@ export interface TUser {
     subscription: boolean
     payment: boolean
   }
+  isKycVerified: boolean
   isDeleted: boolean
   createdAt?: Date
   updatedAt?: Date

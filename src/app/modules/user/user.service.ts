@@ -10,6 +10,11 @@ import {
 } from './user.utils'
 
 const registerUserIntoDB = async (payload: TUser) => {
+  const { password, confirmPassword } = payload
+  if (password !== confirmPassword) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Passwords do not match')
+  }
+
   if (payload.role === 'admin') {
     throw new AppError(
       httpStatus.FORBIDDEN,
@@ -74,9 +79,11 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 }
 
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findById(id).select(
-    '_id id name email photoUrl address city country status createdAt',
-  )
+  const user = await User.findById(id)
+    .select(
+      '_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
+    )
+    .populate([{ path: 'categories', select: 'id title logo' }])
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
@@ -112,28 +119,31 @@ const changeUserStatusFromDB = async (payload: any) => {
   return updateUserStatus
 }
 
-const updateNotifySettings = async (id: string, payload: Partial<TUser['notifySettings']>) => {
-  const user = await User.findById(id);
+const updateNotifySettings = async (
+  id: string,
+  payload: Partial<TUser['notifySettings']>,
+) => {
+  const user = await User.findById(id)
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
   // Current settings
-  const current = user.notifySettings;
+  const current = user.notifySettings
 
   // Merge incoming fields with current state
-  const updated = { ...current, ...payload };
+  const updated = { ...current, ...payload }
 
   // BUSINESS LOGIC RULES
 
   // CASE 1: Client enables "all"
   if (payload.all === true) {
-    updated.all = true;
-    updated.profile = true;
-    updated.service = true;
-    updated.bookings = true;
-    updated.subscription = true;
-    updated.payment = true;
+    updated.all = true
+    updated.profile = true
+    updated.service = true
+    updated.bookings = true
+    updated.subscription = true
+    updated.payment = true
   }
 
   // CASE 2: Client disables a specific item (e.g. profile = false)
@@ -143,10 +153,10 @@ const updateNotifySettings = async (id: string, payload: Partial<TUser['notifySe
     !updated.service ||
     !updated.bookings ||
     !updated.subscription ||
-    !updated.payment;
+    !updated.payment
 
   if (anyDisabled) {
-    updated.all = false;
+    updated.all = false
   }
 
   // CASE 3: If everything is true except ALL
@@ -155,20 +165,20 @@ const updateNotifySettings = async (id: string, payload: Partial<TUser['notifySe
     updated.service &&
     updated.bookings &&
     updated.subscription &&
-    updated.payment;
+    updated.payment
 
   if (allTrue) {
-    updated.all = true;
+    updated.all = true
   }
 
   const result = await User.findByIdAndUpdate(
     id,
     { notifySettings: updated },
-    { new: true }
-  ).select('_id id name email notifySettings');
+    { new: true },
+  ).select('_id id name email notifySettings')
 
-  return result;
-};
+  return result
+}
 
 const updateUserInfoFromDB = async (
   userId: string,
