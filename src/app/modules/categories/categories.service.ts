@@ -36,10 +36,7 @@ const insertIntoDB = async (payload: TCategory, file: any) => {
 
 // Get all category
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const CategoryModel = new QueryBuilder(
-    Category.find({ isDeleted: false }),
-    query,
-  )
+  const CategoryModel = new QueryBuilder(Category.find(), query)
     .search(['title'])
     .filter()
     .paginate()
@@ -57,7 +54,7 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 // Get Category by ID
 const getAIntoDB = async (id: string) => {
   const result = await Category.findById(id)
-  if (!result || result?.isDeleted) {
+  if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Category not found')
   }
 
@@ -71,7 +68,7 @@ const updateAIntoDB = async (
   file: any,
 ) => {
   const category = await Category.findById(id)
-  if (!category || category?.isDeleted) {
+  if (!category) {
     throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
   }
 
@@ -98,16 +95,7 @@ const updateAIntoDB = async (
 
 // Delete Category
 const deleteAIntoDB = async (id: string) => {
-  const result = await Category.findByIdAndUpdate(
-    id,
-    {
-      $set: {
-        isDeleted: true,
-      },
-    },
-    { new: true },
-  )
-
+  const result = await Category.findByIdAndDelete(id)
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Category deletion failed')
   }

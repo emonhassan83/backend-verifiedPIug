@@ -41,7 +41,7 @@ router.patch(
 
 router.put(
   '/update-my-profile',
-  auth(USER_ROLE.user, USER_ROLE.admin),
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   upload.single('image'),
   parseData(),
   UserControllers.updateMyProfile,
@@ -57,7 +57,7 @@ router.put(
 )
 
 router.delete(
-  '/:id',
+  '/delete-profile',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   UserControllers.deleteAUser,
 )
@@ -68,7 +68,11 @@ router.get(
   UserControllers.getMyProfile,
 )
 
-router.get('/', auth(USER_ROLE.admin), UserControllers.getAllUsers)
+router.get(
+  '/',
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  UserControllers.getAllUsers,
+)
 
 router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
 

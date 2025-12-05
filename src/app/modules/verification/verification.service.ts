@@ -29,16 +29,16 @@ const insertIntoDB = async (
   }
 
   // Validate uploaded files
-  const images = files?.images
+  const uploadedFiles = files?.files
 
-  if (!images || images.length !== 2) {
+  if (!uploadedFiles || uploadedFiles.length !== 2) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
       'Two files are required: frontSide and backSide',
     )
   }
 
-  const [frontFile, backFile] = images
+  const [frontFile, backFile] = uploadedFiles
 
   // Upload front side
   const frontSideUrl = await uploadToS3({

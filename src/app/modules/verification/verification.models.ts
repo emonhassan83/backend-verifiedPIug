@@ -15,8 +15,8 @@ const addressSchema = new Schema(
   {
     currentAddress: { type: String, required: true },
     permanentAddress: { type: String, required: true },
-    city: { type: Number, required: true },
-    postalCode: { type: Boolean, required: true },
+    city: { type: String, required: true },
+    postalCode: { type: String, required: true },
   },
   { _id: false },
 )

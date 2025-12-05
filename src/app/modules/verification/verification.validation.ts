@@ -12,16 +12,14 @@ const personalInfoZod = z.object({
 const addressZod = z.object({
   currentAddress: z.string({ required_error: "Current address is required" }),
   permanentAddress: z.string({ required_error: "Permanent address is required" }),
-  city: z.number({ required_error: "City is required" }),
-  postalCode: z.boolean({ required_error: "Postal code is required" }),
+  city: z.string({ required_error: "City is required" }),
+  postalCode: z.string({ required_error: "Postal code is required" }),
 });
 
 // Identity Verification
 const identityZod = z.object({
   idType: z.string({ required_error: "ID type is required" }),
-  number: z.string({ required_error: "ID number is required" }),
-  frontSide: z.string({ required_error: "Front side image is required" }),
-  backSide: z.string({ required_error: "Back side image is required" }),
+  number: z.string({ required_error: "ID number is required" })
 });
 
 // Bank Info

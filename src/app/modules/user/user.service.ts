@@ -83,7 +83,6 @@ const geUserByIdFromDB = async (id: string) => {
     .select(
       '_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
     )
-    .populate([{ path: 'categories', select: 'id title logo' }])
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
@@ -104,7 +103,7 @@ const changeUserStatusFromDB = async (payload: any) => {
     userId,
     { status },
     { new: true },
-  ).select('_id id name email photoUrl contactNumber status')
+  ).select('_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt')
   if (!updateUserStatus) {
     throw new AppError(
       httpStatus.NOT_FOUND,
@@ -198,7 +197,7 @@ const updateUserInfoFromDB = async (
 
   const updatedUser = await User.findByIdAndUpdate(userId, payload, {
     new: true,
-  }).select('_id id name email photoUrl contactNumber status')
+  }).select('_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt')
   if (!updatedUser) {
     throw new AppError(
       httpStatus.NOT_FOUND,

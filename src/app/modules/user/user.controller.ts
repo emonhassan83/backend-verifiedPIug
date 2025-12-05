@@ -142,7 +142,7 @@ const updateLocation = catchAsync(async (req, res) => {
 })
 
 const deleteAUser = catchAsync(async (req, res) => {
-  const result = await UserService.deleteAUserFromDB(req.params.id)
+  const result = await UserService.deleteAUserFromDB(req.user._id)
 
   sendResponse(res, {
     success: true,

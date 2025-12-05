@@ -62,8 +62,7 @@ const userSchema = new Schema<TUser>(
       default: null,
     },
     categories: {
-      type: [Schema.Types.ObjectId],
-      ref: 'Category',
+      type: [String],
       default: [],
     },
     locationUrl: {

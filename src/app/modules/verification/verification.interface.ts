@@ -10,8 +10,8 @@ export interface IPersonalInfo {
 export interface IAddress {
   currentAddress: string
   permanentAddress: string
-  city: number
-  postalCode: boolean
+  city: string
+  postalCode: string
 }
 
 export interface IIdentityVerification {

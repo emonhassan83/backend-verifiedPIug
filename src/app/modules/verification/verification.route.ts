@@ -14,7 +14,7 @@ const upload = multer({ storage })
 router.post(
   '/',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
-  upload.fields([{ name: 'images', maxCount: 2 }]),
+  upload.fields([{ name: 'files', maxCount: 2 }]),
   parseData(),
   zodValidationRequest(VerificationValidation.createValidationSchema),
   VerificationController.insertIntoDB,
