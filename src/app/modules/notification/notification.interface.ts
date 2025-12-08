@@ -8,6 +8,7 @@ export enum modeType {
   Support = 'Support',
   Subscription = 'Subscription',
   Payment = 'Payment',
+  KYC = 'KYC',
 }
 
 export type TNotification = {

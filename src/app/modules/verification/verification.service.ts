@@ -6,6 +6,7 @@ import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { KYC_STATUS, TKycStatus } from './verification.constants'
+import { sendKycStatusNotification } from './verification.utils'
 
 // Create a new Verification
 const insertIntoDB = async (
@@ -85,7 +86,9 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 
 // Get Verification by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Verification.findById(id)
+  const result = await Verification.findById(id).populate([
+    { path: 'user', select: 'name email photoUrl isKycVerified' },
+  ])
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Verification not found')
   }
@@ -117,12 +120,15 @@ const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
 
   // here update user kyc status
   if (status === KYC_STATUS.approved) {
- await User.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
       verification.user, // reference to the user
       { isKycVerified: true },
-      { new: true }
-    );
+      { new: true },
+    )
   }
+
+  // Trigger KYC Notification Util
+  await sendKycStatusNotification(result)
 
   return result
 }
