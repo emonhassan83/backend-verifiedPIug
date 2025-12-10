@@ -81,15 +81,10 @@ const getANotificationFromDB = async (id: string) => {
 const markAsDoneFromDB = async (id: string) => {
   const result = await Notification.updateMany(
     { receiver: id },
-    {
-      $set: {
-        read: true,
-      },
-    },
-    { new: true },
-  )
-  return result
-}
+    { $set: { read: true } }
+  );
+  return result;
+};
 
 const deleteANotificationFromDB = async (id: string) => {
   const notification = await Notification.findById(id)
