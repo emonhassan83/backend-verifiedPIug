@@ -13,7 +13,10 @@ const upload = multer({ storage })
 
 router.post(
   '/register',
-  upload.single('image'),
+   upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'coverPhoto', maxCount: 1 },
+  ]),
   parseData(),
   zodValidationRequest(UserValidation.createValidationSchema),
   UserControllers.registerUser,
@@ -42,7 +45,10 @@ router.patch(
 router.put(
   '/update-my-profile',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
-  upload.single('image'),
+     upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'coverPhoto', maxCount: 1 },
+  ]),
   parseData(),
   UserControllers.updateMyProfile,
 )
@@ -50,7 +56,10 @@ router.put(
 router.put(
   '/:id',
   auth(USER_ROLE.admin),
-  upload.single('image'),
+     upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'coverPhoto', maxCount: 1 },
+  ]),
   parseData(),
   zodValidationRequest(UserValidation.updateValidationSchema),
   UserControllers.updateUserInfo,

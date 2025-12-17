@@ -49,6 +49,10 @@ const userSchema = new Schema<TUser>(
       type: String,
       default: null,
     },
+    coverPhoto: {
+      type: String,
+      default: null,
+    },
     contractNumber: {
       type: String,
       default: null,

@@ -16,6 +16,7 @@ export interface TUser {
   confirmPassword?: string
   fcmToken: string
   photoUrl?: string
+  coverPhoto?: string
   contractNumber?: string
   address: string
   bio: string
