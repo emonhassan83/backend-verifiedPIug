@@ -14,7 +14,7 @@ import { Package } from '../package/package.model'
 import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { Types } from 'mongoose'
-import crypto from 'crypto'
+import * as crypto from 'crypto';
 
 export const paystack = Paystack(config.paystack.secret_key)
 
