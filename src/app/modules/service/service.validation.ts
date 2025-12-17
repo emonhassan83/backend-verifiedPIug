@@ -6,6 +6,15 @@ const createValidationSchema = z.object({
     category: z.string({ required_error: 'Category ID is required' }),
     title: z.string({ required_error: 'Title is required' }),
     subtitle: z.string({ required_error: 'Subtitle is required' }),
+    longitude: z.number({
+      required_error: 'longitude is required!',
+    }),
+    latitude: z.number({
+      required_error: 'latitude is required!',
+    }),
+     address: z.number({
+      required_error: 'address is required!',
+    }),
     description: z.string({ required_error: 'Description is required' }),
     price: z.number({ required_error: 'Description is required' }),
     priceType: z.enum(Object.values(PRICE_TYPE) as [string, ...string[]], {
@@ -20,6 +29,16 @@ const updateValidationSchema = z.object({
     subtitle: z.string({ required_error: 'Subtitle is required' }).optional(),
     description: z
       .string({ required_error: 'Description is required' })
+      .optional(),
+    longitude: z
+      .number({
+        required_error: 'longitude is required!',
+      })
+      .optional(),
+    latitude: z
+      .number({
+        required_error: 'latitude is required!',
+      })
       .optional(),
     price: z.number({ required_error: 'Description is required' }).optional(),
     priceType: z
@@ -41,5 +60,5 @@ const changeStatusValidationSchema = z.object({
 export const ServiceValidation = {
   createValidationSchema,
   updateValidationSchema,
-  changeStatusValidationSchema
+  changeStatusValidationSchema,
 }

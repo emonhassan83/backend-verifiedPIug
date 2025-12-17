@@ -9,6 +9,14 @@ export interface TService {
   subtitle: string
   description: string
   images: string[]
+  address: string
+  locationUrl: string
+  location: {
+    type: 'Point'
+    coordinates: [number, number] // [longitude, latitude]
+  }
+  latitude: number
+  longitude: number
   price: number
   priceType: TPriceType
   status: TServiceStatus

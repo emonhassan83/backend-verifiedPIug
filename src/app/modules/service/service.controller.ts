@@ -28,6 +28,17 @@ const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const getAllRecommendServices = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.getAllRecommendServices(req.user._id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Recommend Services retrieved successfully',
+    data: result,
+  })
+})
+
 const getActiveServices = catchAsync(async (req: Request, res: Response) => {
   req.query['status'] = SERVICE_STATUS.active
   const result = await ServiceService.getAllIntoDB(req.query)
@@ -125,6 +136,7 @@ export const ServiceController = {
   insertIntoDB,
   getAllIntoDB,
   getActiveServices,
+  getAllRecommendServices,
   getMyServices,
   getUserServices,
   getAIntoDB,

@@ -42,6 +42,11 @@ router.get(
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   ServiceController.getMyServices,
 )
+router.get(
+  '/recommend',
+  auth(USER_ROLE.user),
+  ServiceController.getAllRecommendServices,
+)
 
 router.get('/user/:userId', ServiceController.getUserServices)
 router.get('/:id', ServiceController.getAIntoDB)

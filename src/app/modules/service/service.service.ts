@@ -8,29 +8,38 @@ import { User } from '../user/user.model'
 import { Category } from '../categories/categories.models'
 import { SERVICE_STATUS } from './service.constants'
 
+const generateGoogleMapUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps?q=${lat},${lng}`
+}
+
 // Create a new Service
 const insertIntoDB = async (userId: string, payload: TService, files: any) => {
-  const { category: categoryId } = payload
+  const { category: categoryId, latitude, longitude } = payload
 
   const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
+  if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
   const category = await Category.findById(categoryId)
-  if (!category || category?.isDeleted) {
+  if (!category || category.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Category not found')
   }
 
-  // Ensure files exist
-  const uploadedFiles = files?.images
+  if (!latitude || !longitude) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Latitude and longitude are required',
+    )
+  }
+
+  // 🔹 Images upload (unchanged)
+  const uploadedFiles = files?.files
   if (!uploadedFiles || uploadedFiles.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
   }
 
-  // Upload all images
   const imageUrls: string[] = []
-
   for (const file of uploadedFiles) {
     const uploadedUrl = (await uploadToS3({
       file,
@@ -42,9 +51,16 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     imageUrls.push(uploadedUrl)
   }
 
-  // Assign to payload
+  const locationUrl = generateGoogleMapUrl(latitude, longitude)
+
   payload.images = imageUrls
   payload.author = user._id
+
+  payload.locationUrl = locationUrl
+  payload.location = {
+    type: 'Point',
+    coordinates: [longitude, latitude], // MongoDB format
+  }
 
   const result = await Service.create(payload)
   if (!result) {
@@ -74,6 +90,14 @@ const getAllIntoDB = async (query: Record<string, any>) => {
   }
 }
 
+// Get all Service
+const getAllRecommendServices = async (userId: string) => {
+  const user = await User.findById(userId)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+  }
+}
+
 // Get Service by ID
 const getAIntoDB = async (id: string) => {
   const result = await Service.findById(id)
@@ -99,6 +123,20 @@ const updateAIntoDB = async (
   const uploadedFiles = files?.images
   if (!uploadedFiles || uploadedFiles.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
+  }
+
+    /* -------------------- LOCATION UPDATE -------------------- */
+  const latitude = (payload as any)?.latitude
+  const longitude = (payload as any)?.longitude
+
+  if (latitude && longitude) {
+    const locationUrl = generateGoogleMapUrl(latitude, longitude)
+
+    payload.locationUrl = locationUrl
+    payload.location = {
+      type: 'Point',
+      coordinates: [longitude, latitude], // MongoDB standard
+    }
   }
 
   // Upload all images
@@ -188,6 +226,7 @@ const deleteAIntoDB = async (id: string) => {
 export const ServiceService = {
   insertIntoDB,
   getAllIntoDB,
+  getAllRecommendServices,
   getAIntoDB,
   updateAIntoDB,
   changeStatusFromDB,

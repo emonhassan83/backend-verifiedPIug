@@ -33,6 +33,25 @@ const serviceSchema = new Schema<TService>(
       required: true,
       default: [],
     },
+    address: {
+      type: String,
+      required: true,
+    },
+    locationUrl: {
+      type: String,
+      required: true,
+    },
+    location: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: [0, 0],
+      },
+    },
     price: {
       type: Number,
       required: true,
