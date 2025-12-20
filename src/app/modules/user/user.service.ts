@@ -9,6 +9,10 @@ import {
   sendUserStatusNotifYToUser,
 } from './user.utils'
 
+const generateLocationUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps?q=${lat},${lng}`
+}
+
 const registerUserIntoDB = async (payload: TUser) => {
   const { password, confirmPassword } = payload
   if (password !== confirmPassword) {
@@ -81,7 +85,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id name email photoUrl coverPhoto address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
+      '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
     )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
@@ -181,23 +185,52 @@ const updateNotifySettings = async (
 
 const updateUserInfoFromDB = async (
   userId: string,
-  payload: Partial<TUser>,
+  payload: Partial<TUser> & {
+    latitude?: number
+    longitude?: number
+  },
 ) => {
-  //* if the user is is not exist
+  //* 1. Check user exists
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  //* checking if the user is blocked
-  if (user?.status === 'blocked') {
-    throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked ! !')
+  //* 2. Check blocked status
+  if (user.status === 'blocked') {
+    throw new AppError(httpStatus.FORBIDDEN, 'This user is blocked!')
   }
-  // console.log(payload)
 
-  const updatedUser = await User.findByIdAndUpdate(userId, payload, {
+  //* 3. Prepare update object
+  const updateData: Partial<TUser> & {
+    location?: any
+    locationUrl?: string
+  } = { ...payload }
+
+  //* 4. Handle location update
+  if (payload.latitude && payload.longitude) {
+    updateData.location = {
+      type: 'Point',
+      coordinates: [payload.longitude, payload.latitude],
+    }
+
+    updateData.locationUrl = generateLocationUrl(
+      payload.latitude,
+      payload.longitude,
+    )
+
+    // remove extra fields (important)
+    delete (updateData as any).latitude
+    delete (updateData as any).longitude
+  }
+
+  //* 5. Update user
+  const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
     new: true,
-  }).select('_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt')
+  }).select(
+    '_id id name email photoUrl address contractNumber location locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
+  )
+
   if (!updatedUser) {
     throw new AppError(
       httpStatus.NOT_FOUND,
