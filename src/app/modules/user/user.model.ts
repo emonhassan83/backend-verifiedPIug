@@ -158,23 +158,23 @@ const userSchema = new Schema<TUser>(
       },
       profile: {
         type: Boolean,
-        default: false,
+        default: true,
       },
       service: {
         type: Boolean,
-        default: false,
+        default: true,
       },
       bookings: {
         type: Boolean,
-        default: false,
+        default: true,
       },
       subscription: {
         type: Boolean,
-        default: false,
+        default: true,
       },
       payment: {
         type: Boolean,
-        default: false,
+        default: true,
       },
     },
     isKycVerified: {

@@ -63,7 +63,7 @@ const registerUserIntoDB = async (payload: TUser) => {
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id name email photoUrl address city country status createdAt',
+      '_id id name email photoUrl address city country categories status createdAt',
     ),
     query,
   )
@@ -85,7 +85,7 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 const geUserByIdFromDB = async (id: string) => {
   const user = await User.findById(id)
     .select(
-      '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
+      '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role categories notifySettings avgRating ratingCount status isKycVerified createdAt',
     )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
