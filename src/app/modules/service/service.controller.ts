@@ -40,7 +40,8 @@ const getAllRecommendServices = catchAsync(
       statusCode: 200,
       success: true,
       message: 'Recommend Services retrieved successfully',
-      data: result,
+      meta: result.meta,
+      data: result.data,
     })
   },
 )
@@ -73,7 +74,7 @@ const getMyServices = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getUserServices = catchAsync(async (req: Request, res: Response) => {
-  req.query['user'] = req.params.userId
+  req.query['author'] = req.params.userId
   req.query['status'] = SERVICE_STATUS.active
   const result = await ServiceService.getAllIntoDB(req.query)
 

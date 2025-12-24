@@ -106,34 +106,25 @@ const getAllRecommendServices = async (
     !user.location.coordinates ||
     user.location.coordinates.length !== 2
   ) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'User location is not set!',
-    )
+    throw new AppError(httpStatus.BAD_REQUEST, 'User location is not set!')
   }
 
   const [userLng, userLat] = user.location.coordinates
 
-  // 2️⃣ Base Query (Nearby 5 KM)
+  // 2️⃣ Geo filter (5 KM)
   const baseQuery = {
     isDeleted: false,
     status: SERVICE_STATUS.active,
     location: {
-      $near: {
-        $geometry: {
-          type: 'Point',
-          coordinates: [userLng, userLat],
-        },
-        $maxDistance: 5000, // 🔥 5 KM
+      $geoWithin: {
+        $centerSphere: [[userLng, userLat], 5000 / 6378137],
       },
     },
   }
 
   // 3️⃣ Query Builder (Search, Filter, Pagination)
   const serviceQuery = new QueryBuilder(
-    Service.find(baseQuery)
-      .populate('author', 'name photoUrl avgRating')
-      .populate('category', 'title'),
+    Service.find(baseQuery),
     query,
   )
     .search(['title', 'subtitle'])
@@ -146,8 +137,8 @@ const getAllRecommendServices = async (
   const meta = await serviceQuery.countTotal()
 
   return {
-    data,
     meta,
+    data,
   }
 }
 
@@ -255,13 +246,7 @@ const changeStatusFromDB = async (id: string, payload: any) => {
   }
 
   // 🔔 Send notification only if status changed
-  if (oldStatus !== status) {
-    await sendServiceStatusNotifyToAuthor(
-      status,
-      service.author as any,
-      service,
-    )
-  }
+  await sendServiceStatusNotifyToAuthor(status, service.author as any, service)
 
   return result
 }
