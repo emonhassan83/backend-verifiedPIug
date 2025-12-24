@@ -7,6 +7,7 @@ import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { Category } from '../categories/categories.models'
 import { SERVICE_STATUS } from './service.constants'
+import { sendServiceStatusNotifyToAuthor } from './service.utils'
 
 const generateGoogleMapUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -90,11 +91,63 @@ const getAllIntoDB = async (query: Record<string, any>) => {
   }
 }
 
-// Get all Service
-const getAllRecommendServices = async (userId: string) => {
+const getAllRecommendServices = async (
+  query: Record<string, any>,
+  userId: string,
+) => {
+  // 1️⃣ Validate User
   const user = await User.findById(userId)
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+  }
+
+  if (
+    !user.location ||
+    !user.location.coordinates ||
+    user.location.coordinates.length !== 2
+  ) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'User location is not set!',
+    )
+  }
+
+  const [userLng, userLat] = user.location.coordinates
+
+  // 2️⃣ Base Query (Nearby 5 KM)
+  const baseQuery = {
+    isDeleted: false,
+    status: SERVICE_STATUS.active,
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [userLng, userLat],
+        },
+        $maxDistance: 5000, // 🔥 5 KM
+      },
+    },
+  }
+
+  // 3️⃣ Query Builder (Search, Filter, Pagination)
+  const serviceQuery = new QueryBuilder(
+    Service.find(baseQuery)
+      .populate('author', 'name photoUrl avgRating')
+      .populate('category', 'title'),
+    query,
+  )
+    .search(['title', 'subtitle'])
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
+
+  const data = await serviceQuery.modelQuery
+  const meta = await serviceQuery.countTotal()
+
+  return {
+    data,
+    meta,
   }
 }
 
@@ -125,7 +178,7 @@ const updateAIntoDB = async (
     throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
   }
 
-    /* -------------------- LOCATION UPDATE -------------------- */
+  /* -------------------- LOCATION UPDATE -------------------- */
   const latitude = (payload as any)?.latitude
   const longitude = (payload as any)?.longitude
 
@@ -172,12 +225,11 @@ const updateAIntoDB = async (
 const changeStatusFromDB = async (id: string, payload: any) => {
   const { status } = payload
 
-  const service = await Service.findById(id)
-  if (!service || service?.isDeleted) {
+  const service = await Service.findById(id).populate('author')
+  if (!service || service.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
-  // Capture old status
   const oldStatus = service.status
 
   const result = await Service.findByIdAndUpdate(
@@ -185,19 +237,29 @@ const changeStatusFromDB = async (id: string, payload: any) => {
     { status },
     { new: true },
   )
+
   if (!result) {
     throw new AppError(
       httpStatus.NOT_FOUND,
-      'User not found and failed to update status!',
+      'Service not found and failed to update status!',
     )
   }
 
-  // Update category listing count
+  // 📊 Category listing logic (only when activated)
   if (oldStatus !== status && status === SERVICE_STATUS.active) {
     await Category.findByIdAndUpdate(
       service.category,
       { $inc: { listingCount: 1 } },
       { new: true },
+    )
+  }
+
+  // 🔔 Send notification only if status changed
+  if (oldStatus !== status) {
+    await sendServiceStatusNotifyToAuthor(
+      status,
+      service.author as any,
+      service,
     )
   }
 
@@ -219,6 +281,13 @@ const deleteAIntoDB = async (id: string) => {
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Service deletion failed')
   }
+
+  //  decrease the category
+  await Category.findByIdAndUpdate(
+    result.category,
+    { $ins: { listingCount: -1 } },
+    { new: true },
+  )
 
   return result
 }

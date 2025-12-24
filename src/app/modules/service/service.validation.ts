@@ -12,7 +12,7 @@ const createValidationSchema = z.object({
     latitude: z.number({
       required_error: 'latitude is required!',
     }),
-     address: z.number({
+    address: z.string({
       required_error: 'address is required!',
     }),
     description: z.string({ required_error: 'Description is required' }),
@@ -29,6 +29,11 @@ const updateValidationSchema = z.object({
     subtitle: z.string({ required_error: 'Subtitle is required' }).optional(),
     description: z
       .string({ required_error: 'Description is required' })
+      .optional(),
+    address: z
+      .string({
+        required_error: 'address is required!',
+      })
       .optional(),
     longitude: z
       .number({

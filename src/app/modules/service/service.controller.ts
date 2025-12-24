@@ -5,7 +5,11 @@ import sendResponse from '../../utils/sendResponse'
 import { SERVICE_STATUS } from './service.constants'
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.insertIntoDB(req.user._id, req.body, req.files)
+  const result = await ServiceService.insertIntoDB(
+    req.user._id,
+    req.body,
+    req.files,
+  )
 
   sendResponse(res, {
     statusCode: 200,
@@ -28,16 +32,18 @@ const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const getAllRecommendServices = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.getAllRecommendServices(req.user._id)
+const getAllRecommendServices = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await ServiceService.getAllRecommendServices(req.query, req.user._id)
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Recommend Services retrieved successfully',
-    data: result,
-  })
-})
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Recommend Services retrieved successfully',
+      data: result,
+    })
+  },
+)
 
 const getActiveServices = catchAsync(async (req: Request, res: Response) => {
   req.query['status'] = SERVICE_STATUS.active
@@ -53,7 +59,8 @@ const getActiveServices = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getMyServices = catchAsync(async (req: Request, res: Response) => {
-  req.query['user'] = req.user._id
+  req.query['author'] = req.user._id
+  req.query['status'] = SERVICE_STATUS.active
   const result = await ServiceService.getAllIntoDB(req.query)
 
   sendResponse(res, {
@@ -67,6 +74,7 @@ const getMyServices = catchAsync(async (req: Request, res: Response) => {
 
 const getUserServices = catchAsync(async (req: Request, res: Response) => {
   req.query['user'] = req.params.userId
+  req.query['status'] = SERVICE_STATUS.active
   const result = await ServiceService.getAllIntoDB(req.query)
 
   sendResponse(res, {
@@ -109,7 +117,7 @@ const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
 const changeStatus = catchAsync(async (req: Request, res: Response) => {
   const result = await ServiceService.changeStatusFromDB(
     req.params.id,
-    req.body
+    req.body,
   )
 
   sendResponse(res, {

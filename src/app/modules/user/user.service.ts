@@ -83,10 +83,9 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 }
 
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findById(id)
-    .select(
-      '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role categories notifySettings avgRating ratingCount status isKycVerified createdAt',
-    )
+  const user = await User.findById(id).select(
+    '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role categories notifySettings avgRating ratingCount status isKycVerified createdAt',
+  )
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
@@ -107,7 +106,9 @@ const changeUserStatusFromDB = async (payload: any) => {
     userId,
     { status },
     { new: true },
-  ).select('_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt')
+  ).select(
+    '_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
+  )
   if (!updateUserStatus) {
     throw new AppError(
       httpStatus.NOT_FOUND,
@@ -243,9 +244,9 @@ const updateUserInfoFromDB = async (
 
 const updateLocationFromDB = async (
   userId: string,
-  payload: { longitude: number; latitude: number },
+  payload: { longitude: number; latitude: number; address: string },
 ) => {
-  const { longitude, latitude } = payload
+  const { longitude, latitude, address } = payload
 
   //* if the user is is not exist
   const user = await User.findById(userId)
@@ -264,6 +265,7 @@ const updateLocationFromDB = async (
     userId,
     {
       location: { type: 'Point', coordinates: [longitude, latitude] },
+      address: address,
     },
     { new: true },
   )

@@ -11,9 +11,9 @@ export const messages = {
     accountDeactivated: 'User account deactivated.',
   },
 
-  deal: {
-    statusChanged: 'Deal status changed',
-    naerByDeal: 'NearBy deal added',
+  service: {
+    approved: 'Service Approved 🎉',
+    denied: 'Service Denied ❌',
   },
 
   waitList: {

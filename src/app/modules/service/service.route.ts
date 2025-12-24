@@ -37,8 +37,9 @@ router.put(
 )
 
 router.get('/active', ServiceController.getActiveServices)
+
 router.get(
-  '/my-services',
+  '/author/my-services',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   ServiceController.getMyServices,
 )

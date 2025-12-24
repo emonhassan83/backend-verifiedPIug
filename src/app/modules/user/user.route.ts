@@ -22,7 +22,7 @@ router.post(
   UserControllers.registerUser,
 )
 
-router.patch(
+router.put(
   '/change-notify',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   UserControllers.changeUserNotify,
@@ -35,7 +35,7 @@ router.patch(
   UserControllers.changeUserStatus,
 )
 
-router.patch(
+router.put(
   '/update-location',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   zodValidationRequest(UserValidation.updateLocationValidationSchema),

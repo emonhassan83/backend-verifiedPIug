@@ -74,6 +74,8 @@ const serviceSchema = new Schema<TService>(
   { timestamps: true }
 )
 
+serviceSchema.index({ location: '2dsphere' })
+
 export const Service = model<TService, TServiceModel>(
   'Service',
   serviceSchema
