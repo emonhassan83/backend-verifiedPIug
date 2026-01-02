@@ -24,6 +24,7 @@ import { PackageRoutes } from '../modules/package/package.route'
 import { SubscriptionRoutes } from '../modules/subscription/subscription.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
+import { uploadRouter } from '../modules/uploads/route'
 
 const router = Router()
 
@@ -95,6 +96,10 @@ const moduleRoutes = [
   {
     path: '/messages',
     route: MessagesRoutes,
+  },
+  {
+    path: '/uploads',
+    route: uploadRouter,
   },
   {
     path: '/reviews',
