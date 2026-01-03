@@ -357,6 +357,7 @@ const forgetPassword = async (payload: { email: string }) => {
     verification: {
       otp,
       expiresAt,
+      status: true
     },
   })
 
