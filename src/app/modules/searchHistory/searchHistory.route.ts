@@ -14,16 +14,10 @@ router.post(
   SearchHistoryController.insertIntoDB,
 )
 
-router.get(
-  '/',
-  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
-  SearchHistoryController.getAllIntoDB,
-)
-
 router.delete(
   '/clear-histories',
   auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
-  SearchHistoryController.clearHistories,
+  SearchHistoryController.clearHistoriesIntoDB,
 )
 
 router.delete(
@@ -32,4 +26,15 @@ router.delete(
   SearchHistoryController.deleteAIntoDB,
 )
 
+router.get(
+  '/search-data',
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
+  SearchHistoryController.searchData,
+)
+
+router.get(
+  '/',
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
+  SearchHistoryController.getAllIntoDB,
+)
 export const SearchHistoryRoutes = router

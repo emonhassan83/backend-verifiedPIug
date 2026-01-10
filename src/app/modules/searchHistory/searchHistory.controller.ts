@@ -1,59 +1,72 @@
-import { Request, Response } from 'express'
 import catchAsync from '../../utils/catchAsync'
-import { SearchHistoryService } from './searchHistory.service'
+import httpStatus from 'http-status'
 import sendResponse from '../../utils/sendResponse'
+import { SearchHistoryService } from './searchHistory.service'
 
-const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await SearchHistoryService.insertIntoDB(req.user._id, req.body)
+const searchData = catchAsync(async (req, res) => {
+  const result = await SearchHistoryService.searchDataIntoDB(req.query)
 
   sendResponse(res, {
-    statusCode: 200,
+    statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Search history created successfully',
+    message: 'Search histories insert successfully!',
     data: result,
   })
 })
 
-// Get all SearchHistory
-const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
-  req.query['user'] = req.user._id
+const insertIntoDB = catchAsync(async (req, res) => {
+  const result = await SearchHistoryService.insertIntoDB(req.body, req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Search histories insert successfully!',
+    data: result,
+  })
+})
+
+const getAllIntoDB = catchAsync(async (req, res) => {
+  req.query['userId'] = req.user._id;
   const result = await SearchHistoryService.getAllIntoDB(req.query)
 
   sendResponse(res, {
-    statusCode: 200,
     success: true,
-    message: 'Search histories retrieved successfully',
+    statusCode: 200,
+    message: 'Search histories retrieved successfully!',
     meta: result.meta,
     data: result.data,
   })
 })
 
-const clearHistories = catchAsync(async (req: Request, res: Response) => {
-  const result = await SearchHistoryService.clearSearchHistory(req.user._id)
 
+const deleteAIntoDB = catchAsync(async (req, res) => {
+  const result = await SearchHistoryService.deleteAIntoDB(req.params.id)
+  
   sendResponse(res, {
-    statusCode: 200,
     success: true,
-    message: 'Search history clear successfully',
+    statusCode: 200,
+    message: 'Search histories delete successfully!',
     data: result,
   })
 })
 
-// Delete SearchHistory
-const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await SearchHistoryService.deleteAIntoDB(req.params.id)
+const clearHistoriesIntoDB = catchAsync(async (req, res) => {
+  const result = await SearchHistoryService.clearSearchHistory(
+    req.params.userId,
+  )
 
   sendResponse(res, {
-    statusCode: 200,
     success: true,
-    message: 'SearchHistory deleted successfully',
+    statusCode: 200,
+    message: 'Search histories clear successfully!',
     data: result,
   })
 })
 
 export const SearchHistoryController = {
+  searchData,
   insertIntoDB,
   getAllIntoDB,
   deleteAIntoDB,
-  clearHistories
+  clearHistoriesIntoDB,
 }
