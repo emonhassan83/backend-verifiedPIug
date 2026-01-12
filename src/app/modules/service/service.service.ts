@@ -123,10 +123,7 @@ const getAllRecommendServices = async (
   }
 
   // 3️⃣ Query Builder (Search, Filter, Pagination)
-  const serviceQuery = new QueryBuilder(
-    Service.find(baseQuery),
-    query,
-  )
+  const serviceQuery = new QueryBuilder(Service.find(baseQuery), query)
     .search(['title', 'subtitle'])
     .filter()
     .sort()
@@ -144,7 +141,13 @@ const getAllRecommendServices = async (
 
 // Get Service by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Service.findById(id)
+  const result = await Service.findById(id).populate([
+    {
+      path: 'author',
+      select: 'name photoUrl bio address locationUrl avgRating ratingCount',
+    },
+    { path: 'category', select: 'title' },
+  ])
   if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Service not found')
   }
