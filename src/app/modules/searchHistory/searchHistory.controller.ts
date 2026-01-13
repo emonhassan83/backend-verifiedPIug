@@ -9,7 +9,7 @@ const searchData = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
     success: true,
-    message: 'Search histories insert successfully!',
+    message: 'Search data retrieved successfully!',
     data: result,
   })
 })

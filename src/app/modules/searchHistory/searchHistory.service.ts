@@ -47,7 +47,6 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
 
   // 3. Search category
   const categories = await Category.find({
-    isDeleted: false,
     $or: [{ title: { $regex: searchRegex } }],
   })
     .select('title logo')
@@ -61,13 +60,13 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
 }
 
 const getSuggestData = async (userId: string) => {
-  // 1. User চেক (শুধু role দরকার)
+  // 1. User check
   const user = await User.findById(userId).select('role').lean();
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
   }
 
-  // 2. popularSearch — সবচেয়ে নতুন Contents থেকে max 7
+  // 2. popularSearch
   const contents = await Contents.findOne({ isDeleted: false })
     .sort({ createdAt: -1 })
     .select('popularSearch')
@@ -76,20 +75,19 @@ const getSuggestData = async (userId: string) => {
   const popularSearch: string[] = contents?.popularSearch?.slice(0, 7) || [];
 
   // 3. trendingCategories — top 7 title by listingCount
-  const trendingCategories: string[] = await Category.find({ isDeleted: false })
+  const trendingCategories: string[] = await Category.find()
     .sort({ listingCount: -1 })
     .limit(7)
     .select('title')
     .lean()
     .then(categories => categories.map(cat => cat.title));
 
-  // 4. suggestPlanner / suggestVendor — শুধু name রিটার্ন
+  // 4. suggestPlanner / suggestVendor
   let suggestPlanner: string[] = [];
   let suggestVendor: string[] = [];
 
-  // Role-based suggestion (শুধু name নেওয়া হচ্ছে)
+  // Role-based suggestion
   if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
-    // user বা vendor হলে planner suggest
     suggestPlanner = await User.find({
       role: USER_ROLE.planer,
       status: 'active',
@@ -104,7 +102,6 @@ const getSuggestData = async (userId: string) => {
   }
 
   if (user.role === USER_ROLE.planer) {
-    // planner হলে vendor suggest
     suggestVendor = await User.find({
       role: USER_ROLE.vendor,
       status: 'active',
@@ -118,12 +115,20 @@ const getSuggestData = async (userId: string) => {
       .then(users => users.map(u => u.name));
   }
 
-  return {
+  const responseData: any = {
     popularSearch,
-    suggestPlanner,
-    suggestVendor,
     trendingCategories,
   };
+
+  if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
+    responseData.suggestPlanner = suggestPlanner;
+  }
+
+  if (user.role === USER_ROLE.planer) {
+    responseData.suggestVendor = suggestVendor;
+  }
+
+  return responseData;
 };
 
 // Create a new SearchHistory
