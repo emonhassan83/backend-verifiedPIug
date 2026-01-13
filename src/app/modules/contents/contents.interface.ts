@@ -5,8 +5,7 @@ export interface TContents {
   aboutUs?: string
   termsAndConditions?: string
   privacyPolicy?: string
-  supports?: string
-  faq?: string
+  popularSearch?: string[]
   createdBy: Types.ObjectId
   isDeleted?: boolean
 }

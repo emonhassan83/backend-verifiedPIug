@@ -33,6 +33,12 @@ router.get(
 )
 
 router.get(
+  '/suggests-data',
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
+  SearchHistoryController.getSuggestData,
+)
+
+router.get(
   '/',
   auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   SearchHistoryController.getAllIntoDB,

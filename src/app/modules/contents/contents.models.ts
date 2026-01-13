@@ -12,11 +12,8 @@ const contentsSchema = new Schema<TContents>(
     privacyPolicy: {
       type: String,
     },
-    supports: {
-      type: String,
-    },
-    faq: {
-      type: String,
+    popularSearch: {
+      type: [String],
     },
     isDeleted: {
       type: Boolean,

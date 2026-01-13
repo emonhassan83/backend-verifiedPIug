@@ -14,6 +14,17 @@ const searchData = catchAsync(async (req, res) => {
   })
 })
 
+const getSuggestData = catchAsync(async (req, res) => {
+  const result = await SearchHistoryService.getSuggestData(req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.CREATED,
+    success: true,
+    message: 'Search suggest retrieved successfully!',
+    data: result,
+  })
+})
+
 const insertIntoDB = catchAsync(async (req, res) => {
   const result = await SearchHistoryService.insertIntoDB(req.body, req.user._id)
 
@@ -65,6 +76,7 @@ const clearHistoriesIntoDB = catchAsync(async (req, res) => {
 
 export const SearchHistoryController = {
   searchData,
+  getSuggestData,
   insertIntoDB,
   getAllIntoDB,
   deleteAIntoDB,

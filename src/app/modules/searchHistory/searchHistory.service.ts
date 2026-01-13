@@ -8,6 +8,7 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { Service } from '../service/service.models'
 import { SERVICE_STATUS } from '../service/service.constants'
 import { Category } from '../categories/categories.models'
+import { Contents } from '../contents/contents.models'
 
 const searchDataIntoDB = async (query: Record<string, unknown>) => {
   const { searchTerm } = query
@@ -59,6 +60,72 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getSuggestData = async (userId: string) => {
+  // 1. User চেক (শুধু role দরকার)
+  const user = await User.findById(userId).select('role').lean();
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
+  }
+
+  // 2. popularSearch — সবচেয়ে নতুন Contents থেকে max 7
+  const contents = await Contents.findOne({ isDeleted: false })
+    .sort({ createdAt: -1 })
+    .select('popularSearch')
+    .lean();
+
+  const popularSearch: string[] = contents?.popularSearch?.slice(0, 7) || [];
+
+  // 3. trendingCategories — top 7 title by listingCount
+  const trendingCategories: string[] = await Category.find({ isDeleted: false })
+    .sort({ listingCount: -1 })
+    .limit(7)
+    .select('title')
+    .lean()
+    .then(categories => categories.map(cat => cat.title));
+
+  // 4. suggestPlanner / suggestVendor — শুধু name রিটার্ন
+  let suggestPlanner: string[] = [];
+  let suggestVendor: string[] = [];
+
+  // Role-based suggestion (শুধু name নেওয়া হচ্ছে)
+  if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
+    // user বা vendor হলে planner suggest
+    suggestPlanner = await User.find({
+      role: USER_ROLE.planer,
+      status: 'active',
+      isDeleted: false,
+      avgRating: { $gt: 0 },
+    })
+      .sort({ avgRating: -1, ratingCount: -1 })
+      .limit(7)
+      .select('name')
+      .lean()
+      .then(users => users.map(u => u.name));
+  }
+
+  if (user.role === USER_ROLE.planer) {
+    // planner হলে vendor suggest
+    suggestVendor = await User.find({
+      role: USER_ROLE.vendor,
+      status: 'active',
+      isDeleted: false,
+      avgRating: { $gt: 0 },
+    })
+      .sort({ avgRating: -1, ratingCount: -1 })
+      .limit(7)
+      .select('name')
+      .lean()
+      .then(users => users.map(u => u.name));
+  }
+
+  return {
+    popularSearch,
+    suggestPlanner,
+    suggestVendor,
+    trendingCategories,
+  };
+};
+
 // Create a new SearchHistory
 const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
   const { modelType, refId } = payload
@@ -106,17 +173,19 @@ const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
   // 3. Check existing history - upsert style (fastest way to avoid race conditions)
   const existing = await SearchHistory.findOneAndUpdate(
     { userId: user._id, modelType, refId },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  )
 
   // 4. Return result
-  return existing;
+  return existing
 }
 
 // Get all SearchHistory
 const getAllIntoDB = async (query: Record<string, any>) => {
   const SearchHistoryModel = new QueryBuilder(
-    SearchHistory.find().populate([{path: "refId", select: "_id name title photoUrl images logo"}]),
+    SearchHistory.find().populate([
+      { path: 'refId', select: '_id name title photoUrl images logo' },
+    ]),
     query,
   )
     .search([''])
@@ -160,6 +229,7 @@ const deleteAIntoDB = async (id: string) => {
 
 export const SearchHistoryService = {
   searchDataIntoDB,
+  getSuggestData,
   insertIntoDB,
   getAllIntoDB,
   clearSearchHistory,
