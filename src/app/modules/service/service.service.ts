@@ -168,9 +168,6 @@ const updateAIntoDB = async (
 
   // Ensure files exist
   const uploadedFiles = files?.files
-  if (!uploadedFiles || uploadedFiles.length === 0) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
-  }
 
   /* -------------------- LOCATION UPDATE -------------------- */
   const latitude = (payload as any)?.latitude
