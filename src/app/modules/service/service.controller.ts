@@ -104,7 +104,7 @@ const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await ServiceService.updateAIntoDB(
     req.params.id,
     req.body,
-    req.file,
+    req.files,
   )
 
   sendResponse(res, {
