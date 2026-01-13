@@ -3,41 +3,83 @@ import { TOrder } from './order.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { Order } from './order.models'
 import AppError from '../../errors/AppError'
-import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
-import { Category } from '../categories/categories.models'
+import { Types } from 'mongoose'
+
+const generateLocationUrl = (lat: number, lng: number) => {
+  return `https://www.google.com/maps?q=${lat},${lng}`
+}
 
 // Create a new Order
 const insertIntoDB = async (userId: string, payload: TOrder) => {
-  const { receiver: receiverId, type, project: projectId } = payload
+  const { receiver: receiverId, latitude, longitude, duration, totalAmount, authority } = payload;
 
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
+  // 1. Validate sender (current logged-in user)
+  const sender = await User.findById(userId).select('role status isDeleted');
+  if (!sender || sender.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found or deleted');
   }
 
-  const receiver = await User.findById(receiverId)
-  if (!receiver || receiver?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Order receiver profile not found')
+  // 2. Validate receiver
+  const receiver = await User.findById(receiverId).select('role status isDeleted');
+  if (!receiver || receiver.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order receiver profile not found or deleted');
   }
 
-  // Assign to payload
-  payload.author = user._id
+  // 3. Assign sender
+  payload.authority = (sender.role) as any
+  payload.sender = sender._id as Types.ObjectId;
 
-  const result = await Order.create(payload)
+  // 4. Handle location
+  if (latitude && longitude) {
+    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Latitude and longitude must be numbers');
+    }
+
+    payload.location = {
+      type: 'Point',
+      coordinates: [longitude, latitude], // MongoDB GeoJSON: [lng, lat]
+    };
+
+    payload.locationUrl = generateLocationUrl(latitude, longitude);
+  }
+
+  // 5. Auto-calculate endDate based on duration (assuming duration in days)
+  if (duration && payload.startDate) {
+    const start = new Date(payload.startDate);
+    if (isNaN(start.getTime())) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid start date format');
+    }
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + duration);
+    payload.endDate = end.toISOString().split('T')[0]; // YYYY-MM-DD
+  }
+
+  // 6. Payment logic: initialAmount = 50% of totalAmount
+  if (totalAmount) {
+    payload.initialAmount = Number(totalAmount) / 2;
+    payload.pendingAmount = Number(totalAmount) - payload.initialAmount;
+    payload.finalAmount = payload.pendingAmount; // initially same as pending
+  } else {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Total amount is required');
+  }
+
+  // 7. Create the order
+  const result = await Order.create(payload);
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Order creation failed')
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Order creation failed');
   }
 
-  return result
-}
+  // 8. sent receiver to notify them
+
+
+  return result;
+};
 
 // Get all Order
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const OrderModel = new QueryBuilder(
-    Order.find({ isDeleted: false }),
-    query,
-  )
+  const OrderModel = new QueryBuilder(Order.find({ isDeleted: false }), query)
     .search(['title'])
     .filter()
     .paginate()
@@ -63,10 +105,7 @@ const getAIntoDB = async (id: string) => {
 }
 
 // Update Order
-const updateAIntoDB = async (
-  id: string,
-  payload: Partial<TOrder>
-) => {
+const updateAIntoDB = async (id: string, payload: Partial<TOrder>) => {
   const order = await Order.findById(id)
   if (!order || order?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')

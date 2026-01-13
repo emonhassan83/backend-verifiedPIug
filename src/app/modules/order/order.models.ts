@@ -1,10 +1,24 @@
-import { Schema, model, Types } from 'mongoose'
-import { TOrder, TOrderModel } from './order.interface'
-import { DURATION_TYPE, ORDER_STATUS, ORDER_TYPE } from './order.constants'
+import { Schema, model } from 'mongoose';
+import { TOrder, TOrderModel } from './order.interface';
+import { ORDER_AUTHORITY, ORDER_STATUS, PAYMENT_STATUS } from './order.constants';
+
+const paymentSubSchema = new Schema(
+  {
+    amountPaid: { type: Number, default: 0 },
+    paidAt: { type: Date },
+    transactionId: { type: String },
+    status: {
+      type: String,
+      enum: Object.keys(PAYMENT_STATUS),
+      default: PAYMENT_STATUS.pending
+    },
+  },
+  { _id: false }
+);
 
 const orderSchema = new Schema<TOrder>(
   {
-    author: {
+    sender: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
@@ -14,10 +28,10 @@ const orderSchema = new Schema<TOrder>(
       ref: 'User',
       required: true,
     },
-    project: {
-      type: Schema.Types.ObjectId,
-      ref: 'Project',
-      required: false,
+    authority: {
+      type: String,
+      enum: Object.keys(ORDER_AUTHORITY),
+      required: true,
     },
     title: {
       type: String,
@@ -26,7 +40,10 @@ const orderSchema = new Schema<TOrder>(
     },
     type: {
       type: String,
-      enum: Object.keys(ORDER_TYPE),
+      required: true,
+    },
+    shortDescription: {
+      type: String,
       required: true,
     },
     description: {
@@ -37,42 +54,60 @@ const orderSchema = new Schema<TOrder>(
       type: Number,
       required: true,
     },
-    durationType: {
-      type: String,
-      enum: Object.keys(DURATION_TYPE),
-      required: true,
-    },
-    amount: {
+    totalAmount: {
       type: Number,
       required: true,
     },
-    initialPayment: {
+    initialAmount: {
       type: Number,
       default: 0,
     },
-    startDate: {
-      type: String,
-      required: true,
+    pendingAmount: {
+      type: Number,
+      default: 0,
     },
-    endDate: {
-      type: String,
-      required: true,
+    finalAmount: {
+      type: Number,
+      default: 0,
     },
+
+    initialPayment: paymentSubSchema,
+    finalPayment: paymentSubSchema,
+
+    startDate: { type: String },
+    endDate: { type: String },
+    actualStartDate: { type: Date },
+    actualEndDate: { type: Date },
+
+    address: { type: String, required: true },
+    locationUrl: { type: String, required: true },
     location: {
-      type: String,
-      required: true,
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: [0, 0] },
     },
+
     status: {
       type: String,
       enum: Object.keys(ORDER_STATUS),
       default: ORDER_STATUS.pending,
     },
-    isDeleted: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  { timestamps: true },
-)
 
-export const Order = model<TOrder, TOrderModel>('Order', orderSchema)
+    initialPayCompleted: { type: Boolean, default: false },
+    finalPayCompleted: { type: Boolean, default: false },
+    isFullyPaid: { type: Boolean, default: false },
+    isCompleted: { type: Boolean, default: false },
+
+    isDeleted: { type: Boolean, default: false },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Geo index for location queries
+orderSchema.index({ location: '2dsphere' });
+
+// Optional: auto-expiry if needed
+// orderSchema.index({ expireAt: 1 }, { expireAfterSeconds: 0 });
+
+export const Order = model<TOrder, TOrderModel>('Order', orderSchema);
