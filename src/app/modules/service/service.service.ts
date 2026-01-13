@@ -185,7 +185,7 @@ const updateAIntoDB = async (
 
   // Upload all images
   const imageUrls: string[] = []
-
+ if (uploadedFiles && Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
   for (const file of uploadedFiles) {
     const uploadedUrl = (await uploadToS3({
       file,
@@ -196,6 +196,7 @@ const updateAIntoDB = async (
 
     imageUrls.push(uploadedUrl)
   }
+}
 
   // Assign to payload
   payload.images = imageUrls
