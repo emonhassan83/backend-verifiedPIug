@@ -180,14 +180,14 @@ const updateAIntoDB = async (
     };
   }
 
-  // -------------------- Images Handling (Optional) --------------------
-  let finalImages = service.images || [];
+  // -------------------- Images Handling (Replace old images) --------------------
+  let finalImages: string[] = [];
 
   const uploadedFiles = files?.files;
 
   if (uploadedFiles && Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
+    
     const newImageUrls: string[] = [];
-
     for (const file of uploadedFiles) {
       const uploadedUrl = (await uploadToS3({
         file,
@@ -197,10 +197,11 @@ const updateAIntoDB = async (
       newImageUrls.push(uploadedUrl);
     }
 
-    finalImages = [...finalImages, ...newImageUrls];
+    finalImages = newImageUrls; 
+  } else {
+    finalImages = service.images || [];
   }
 
-  // payload-এ images
   payload.images = finalImages;
 
   // -------------------- Final Update --------------------
