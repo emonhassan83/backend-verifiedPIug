@@ -9,6 +9,7 @@ import {
   changeOrderStatusNotification,
   sendNewOrderNotification,
 } from './order.utils'
+import { ORDER_STATUS } from './order.constants'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -165,6 +166,16 @@ const changeStatusFromDB = async (id: string, payload: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
   }
 
+  // if set canalled then must be order status running
+  if (status === ORDER_STATUS.cancelled) {
+    if (order.status !== ORDER_STATUS.running) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        `Order cannot be cancelled. Current status is "${order.status}". Cancellation is only allowed when status is "running".`,
+      )
+    }
+  }
+
   const result = await Order.findByIdAndUpdate(
     order._id,
     { status },
@@ -190,6 +201,21 @@ const changeStatusFromDB = async (id: string, payload: any) => {
 
 // Delete Order
 const deleteAIntoDB = async (id: string) => {
+  // 1. Find the order first to check status
+  const order = await Order.findById(id)
+  if (!order || order?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+  }
+
+  // 2. Check if status is "pending"
+  if (order.status !== ORDER_STATUS.pending) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      `Order cannot be deleted. Current status is "${order.status}". Only pending orders can be deleted.`,
+    )
+  }
+
+  // 3. Soft delete (isDeleted = true)
   const result = await Order.findByIdAndUpdate(
     id,
     {
@@ -199,9 +225,8 @@ const deleteAIntoDB = async (id: string) => {
     },
     { new: true },
   )
-
   if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Order deletion failed')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Order deletion failed!')
   }
 
   return result
