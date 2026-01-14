@@ -9,14 +9,14 @@ const router = Router()
 
 router.post(
   '/',
-  auth(USER_ROLE.planer, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
   zodValidationRequest(OrderValidation.createValidationSchema),
   OrderController.insertIntoDB,
 )
 
 router.patch(
   '/status/:id',
-  auth(USER_ROLE.admin),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   zodValidationRequest(OrderValidation.changeStatusValidationSchema),
   OrderController.changeStatus,
 )
@@ -29,15 +29,15 @@ router.put(
 )
 
 router.get(
-  '/my-orders',
+  '/my-send-orders',
   auth(USER_ROLE.planer, USER_ROLE.user),
-  OrderController.getMyOrder,
+  OrderController.mySendOrders,
 )
 
 router.get(
-  '/receiver-order',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  OrderController.getReceiverOrder,
+  '/my-receive-orders',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  OrderController.myReceiveOrders,
 )
 
 router.get(
@@ -48,7 +48,7 @@ router.get(
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.planer, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   OrderController.deleteAIntoDB,
 )
 

@@ -7,20 +7,12 @@ import { ProjectValidation } from './project.validation'
 
 const router = Router()
 
-router.post(
-  '/',
-  auth(USER_ROLE.planer),
-  zodValidationRequest(ProjectValidation.createValidationSchema),
-  ProjectController.insertIntoDB,
-)
-
 router.patch(
   '/status/:id',
   auth(USER_ROLE.planer),
   zodValidationRequest(ProjectValidation.changeStatusValidationSchema),
   ProjectController.changeStatus,
 )
-
 
 router.get(
   '/:id',

@@ -15,27 +15,27 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
 })
 
 // Get all Service
-const getMyOrder = catchAsync(async (req: Request, res: Response) => {
-  req.query['user'] = req.user._id
+const mySendOrders = catchAsync(async (req: Request, res: Response) => {
+  req.query['sender'] = req.user._id
   const result = await OrderService.getAllIntoDB(req.query)
   
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'My orders retrieved successfully',
+    message: 'My send orders retrieved successfully',
     meta: result.meta,
     data: result.data,
   })
 })
 
-const getReceiverOrder = catchAsync(async (req: Request, res: Response) => {
+const myReceiveOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['receiver'] = req.user._id
   const result = await OrderService.getAllIntoDB(req.query)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Receiver orders retrieved successfully',
+    message: 'My receive orders retrieved successfully',
     meta: result.meta,
     data: result.data,
   })
@@ -96,8 +96,8 @@ const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 export const OrderController = {
   insertIntoDB,
-  getReceiverOrder,
-  getMyOrder,
+  myReceiveOrders,
+  mySendOrders,
   getAIntoDB,
   updateAIntoDB,
   changeStatus,

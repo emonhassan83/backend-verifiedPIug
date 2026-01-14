@@ -32,7 +32,11 @@ const insertIntoDB = async (userId: string, payload: TProject) => {
 
 // Get Project by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Project.findOne({ order: id })
+  const result = await Project.findOne({ order: id }).populate([
+    { path: 'author', select: 'name photoUrl' },
+    { path: 'client', select: 'name photoUrl' },
+    { path: 'order' },
+  ])
   if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Project not found')
   }

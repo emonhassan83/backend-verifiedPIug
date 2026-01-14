@@ -1,4 +1,4 @@
-import { Schema, model, Types } from "mongoose";
+import { Schema, model } from "mongoose";
 import { TProject, TProjectModel } from "./project.interface";
 import { PROJECT_STATUS } from "./project.constants";
 
@@ -22,27 +22,19 @@ const projectSchema = new Schema<TProject>(
     budget: {
       type: Number,
       required: true,
-      default: 0,
     },
     expense: {
       type: Number,
-      required: true,
       default: 0,
     },
     received: {
       type: Number,
       required: true,
-      default: 0,
-    },
-    vendorCount: {
-      type: Number,
-      required: true,
-      default: 0,
     },
     status: {
       type: String,
       enum: Object.keys(PROJECT_STATUS),
-      default: PROJECT_STATUS.pending,
+      default: PROJECT_STATUS.ongoing,
     },
     isDeleted: {
       type: Boolean,

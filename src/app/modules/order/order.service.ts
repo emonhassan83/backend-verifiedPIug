@@ -103,7 +103,13 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
 
 // Get all Order
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const OrderModel = new QueryBuilder(Order.find({ isDeleted: false }), query)
+  const OrderModel = new QueryBuilder(
+    Order.find({ isDeleted: false }).populate([
+      { path: 'sender', select: 'name photoUrl' },
+      { path: 'receiver', select: 'name photoUrl' },
+    ]),
+    query,
+  )
     .search(['title'])
     .filter()
     .paginate()
@@ -120,7 +126,10 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 
 // Get Order by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Order.findById(id)
+  const result = await Order.findById(id).populate([
+    { path: 'sender', select: 'name photoUrl' },
+    { path: 'receiver', select: 'name photoUrl' },
+  ])
   if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Order not found')
   }

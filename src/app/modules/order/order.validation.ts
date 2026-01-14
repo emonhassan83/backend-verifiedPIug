@@ -1,12 +1,9 @@
 import { z } from 'zod'
-import { ORDER_STATUS, ORDER_AUTHORITY } from './order.constants'
+import { ORDER_STATUS } from './order.constants'
 
 const createValidationSchema = z.object({
   body: z.object({
     receiver: z.string({ required_error: 'Receiver ID is required' }),
-    authority: z.enum(Object.keys(ORDER_AUTHORITY) as [string, ...string[]], {
-      required_error: 'Order authority is required',
-    }),
     title: z.string({ required_error: 'Title is required' }).min(3),
     type: z.string({ required_error: 'Order type is required' }).min(3),
     shortDescription: z

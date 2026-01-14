@@ -28,32 +28,34 @@ import { modeType } from '../notification/notification.interface'
 import { TOrder } from '../order/order.interface'
 import { Order } from '../order/order.models'
 import { ORDER_STATUS } from '../order/order.constants'
+import { Project } from '../project/project.models'
+import { PROJECT_STATUS } from '../project/project.constants'
 
 const checkout = async (payload: TPayment) => {
-  const transactionId = generateTransactionId();
-  const { modelType, user: userId, reference, type } = payload;
+  const transactionId = generateTransactionId()
+  const { modelType, user: userId, reference, type } = payload
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  let order: TOrder | null = null;
-  let subscription: TSubscriptions | null = null;
+  let order: TOrder | null = null
+  let subscription: TSubscriptions | null = null
 
   // Fetch model
   if (modelType === PAYMENT_MODEL_TYPE.Order) {
-    order = await Order.findById(reference);
+    order = await Order.findById(reference)
     if (!order) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!')
     }
   } else if (modelType === PAYMENT_MODEL_TYPE.Subscription) {
-    subscription = await Subscription.findById(reference).populate('package');
+    subscription = await Subscription.findById(reference).populate('package')
     if (!subscription) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!')
     }
   } else {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type');
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type')
   }
 
   // ── NEW LOGIC: Prevent duplicate payment for completed steps ──
@@ -61,23 +63,23 @@ const checkout = async (payload: TPayment) => {
     if (type === 'initial' && order.initialPayCompleted) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Initial payment for this order is already completed.'
-      );
+        'Initial payment for this order is already completed.',
+      )
     }
 
     if (type === 'final' && order.finalPayCompleted) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Final payment for this order is already completed.'
-      );
+        'Final payment for this order is already completed.',
+      )
     }
 
     // Also check if total is already fully paid
     if (order.isFullyPaid) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'This order is already fully paid.'
-      );
+        'This order is already fully paid.',
+      )
     }
   }
 
@@ -87,36 +89,36 @@ const checkout = async (payload: TPayment) => {
     user: userId,
     type,
     isPaid: false,
-  });
+  })
 
   if (paymentData) {
     // Reuse existing unpaid payment (update transactionId)
     paymentData = await Payment.findByIdAndUpdate(
       paymentData._id,
       { transactionId },
-      { new: true }
-    );
+      { new: true },
+    )
   } else {
     // Create new payment
-    payload.transactionId = transactionId;
+    payload.transactionId = transactionId
 
     // Set correct amount based on payment type
     if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
       payload.amount =
-        type === 'initial' ? order.initialAmount : order.pendingAmount;
+        type === 'initial' ? order.initialAmount : order.pendingAmount
     } else {
       // @ts-ignore
-      payload.amount = subscription?.amount;
+      payload.amount = subscription?.amount
     }
 
-    paymentData = await Payment.create(payload);
+    paymentData = await Payment.create(payload)
   }
 
   if (!paymentData) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to create/update payment'
-    );
+      'Failed to create/update payment',
+    )
   }
 
   // Handle Subscription checkout
@@ -125,7 +127,7 @@ const checkout = async (payload: TPayment) => {
       userId,
       packageId: reference,
       paymentId: paymentData._id,
-    });
+    })
   }
 
   // Handle Order checkout
@@ -141,63 +143,66 @@ const checkout = async (payload: TPayment) => {
         email: user?.email || '',
       },
       paymentId: paymentData._id,
-    });
+    })
 
-    return checkoutSessionUrl;
+    return checkoutSessionUrl
   }
 
   // Fallback
-  throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Unexpected model type');
-};
+  throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Unexpected model type')
+}
 
 const confirmPayment = async (query: Record<string, any>) => {
-  const { reference, paymentId } = query;
-  let verifiedPaymentId: number | null = null;
+  const { reference, paymentId } = query
+  let verifiedPaymentId: number | null = null
 
-  const maxRetries = 3;
-  let attempt = 0;
+  const maxRetries = 3
+  let attempt = 0
 
   while (attempt < maxRetries) {
-    const session = await startSession();
+    const session = await startSession()
     try {
-      session.startTransaction();
+      session.startTransaction()
 
-      const payment = await Payment.findById(paymentId).session(session);
+      const payment = await Payment.findById(paymentId).session(session)
       if (!payment) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!');
+        throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
       }
 
-      let verification;
+      let verification
       if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
-        verification = await verifyPaystackSubscription(reference);
+        verification = await verifyPaystackSubscription(reference)
       } else {
-        verification = await verifyPaystackTransaction(reference);
+        verification = await verifyPaystackTransaction(reference)
       }
 
       if (!verification.status || verification.data.status !== 'success') {
-        throw new AppError(httpStatus.BAD_REQUEST, 'Payment verification failed');
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Payment verification failed',
+        )
       }
 
-      verifiedPaymentId = verification.data.id;
+      verifiedPaymentId = verification.data.id
 
       // Update payment
-      await Payment.findByIdAndUpdate(
+      const result = await Payment.findByIdAndUpdate(
         paymentId,
         {
           isPaid: true,
           status: PAYMENT_STATUS.paid,
           paymentIntentId: verification.data.id,
         },
-        { new: true, session }
-      );
+        { new: true, session },
+      )
 
       if (payment.modelType === PAYMENT_MODEL_TYPE.Order) {
-        const order = await Order.findById(payment.reference).session(session);
+        const order = await Order.findById(payment.reference).session(session)
         if (!order) {
-          throw new AppError(httpStatus.NOT_FOUND, 'Order not found!');
+          throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
         }
 
-        let updateFields: Partial<TOrder> = {};
+        let updateFields: Partial<TOrder> = {}
 
         // Handle initial payment
         if (payment.type === 'initial') {
@@ -211,9 +216,44 @@ const confirmPayment = async (query: Record<string, any>) => {
             },
             initialPayCompleted: true,
             pendingAmount: order.totalAmount - payment.amount,
-            status: ORDER_STATUS.running, 
-            actualStartDate: new Date()
-          };
+            status: ORDER_STATUS.running,
+          }
+
+          // Check if project already exists for this order
+          const existingProject = await Project.findOne(
+            { order: order._id, isDeleted: false },
+            null,
+            { session },
+          )
+
+          if (existingProject) {
+            // Project already exists → just update received amount & status if needed
+            await Project.findByIdAndUpdate(
+              existingProject._id,
+              {
+                received: payment.amount, // add the initial payment
+                status: PROJECT_STATUS.ongoing, // ensure it's ongoing
+                updatedAt: new Date(),
+              },
+              { session },
+            )
+          } else {
+            // No project yet → create new one
+            await Project.create(
+              [
+                {
+                  author: order.sender,
+                  client: order.receiver,
+                  order: order._id,
+                  budget: order.totalAmount,
+                  expense: 0,
+                  received: payment.amount,
+                  status: PROJECT_STATUS.ongoing,
+                },
+              ],
+              { session },
+            )
+          }
         }
         // Handle final payment
         else if (payment.type === 'final') {
@@ -231,15 +271,32 @@ const confirmPayment = async (query: Record<string, any>) => {
             status: ORDER_STATUS.completed,
             isCompleted: true,
             actualEndDate: new Date(),
-          };
+          }
         }
 
-        await Order.findByIdAndUpdate(payment.reference, updateFields, { session });
+        //  Update existing project received amount on final payment
+        if (!order.isCompleted && order.status !== ORDER_STATUS.completed) {
+        await Project.findOneAndUpdate(
+          { order: order._id, isDeleted: false },
+          {
+            $inc: { received: payment.amount },
+            status: PROJECT_STATUS.completed, // optional: mark project completed
+            updatedAt: new Date(),
+          },
+          { session },
+        )
+        }
+
+        await Order.findByIdAndUpdate(payment.reference, updateFields, {
+          session,
+        })
       } else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         // Your existing subscription logic...
-        const subscription = await Subscription.findById(payment.reference).session(session);
+        const subscription = await Subscription.findById(
+          payment.reference,
+        ).session(session)
         if (!subscription) {
-          throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!');
+          throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
         }
 
         await Subscription.findByIdAndUpdate(
@@ -249,49 +306,51 @@ const confirmPayment = async (query: Record<string, any>) => {
             paymentStatus: PAYMENT_STATUS.paid,
             status: 'confirmed',
           },
-          { new: true, session }
-        );
+          { new: true, session },
+        )
 
         await Package.findByIdAndUpdate(
           subscription.package,
           { $inc: { popularity: 1 } },
-          { session }
-        );
+          { session },
+        )
 
-        const finalExpiryDate = subscription.expiredAt || new Date();
+        const finalExpiryDate = subscription.expiredAt || new Date()
         await User.findByIdAndUpdate(
           payment.user,
           { $set: { packageExpiry: finalExpiryDate } },
-          { session }
-        );
+          { session },
+        )
       }
 
       // Send notifications (you can call your notify functions here)
-      await paymentNotifyToUser('SUCCESS', payment);
-      await paymentNotifyToAdmin('SUCCESS', payment);
+      await paymentNotifyToUser('SUCCESS', payment)
+      await paymentNotifyToAdmin('SUCCESS', payment)
 
-      await session.commitTransaction();
-      return payment;
+      await session.commitTransaction()
+      return result
     } catch (error: any) {
-      await session.abortTransaction();
-      attempt++;
+      await session.abortTransaction()
+      attempt++
       if (attempt === maxRetries) {
         if (verifiedPaymentId) {
           try {
-            await refundPaystackPayment(verifiedPaymentId);
+            await refundPaystackPayment(verifiedPaymentId)
           } catch (refundError: any) {
-            console.error('Refund failed:', refundError.message);
+            console.error('Refund failed:', refundError.message)
           }
         }
-        throw new AppError(httpStatus.BAD_GATEWAY, error.message);
+        throw new AppError(httpStatus.BAD_GATEWAY, error.message)
       }
-      console.warn(`Retrying transaction (attempt ${attempt + 1}/${maxRetries})`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      console.warn(
+        `Retrying transaction (attempt ${attempt + 1}/${maxRetries})`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     } finally {
-      session.endSession();
+      session.endSession()
     }
   }
-};
+}
 
 const cancelSubscription = async (subscriptionId: string, userId: string) => {
   const subscription = await Subscription.findById(subscriptionId)

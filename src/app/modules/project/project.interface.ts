@@ -9,7 +9,6 @@ export interface TProject {
   budget: number
   expense: number
   received: number
-  vendorCount: number
   status: TProjectStatus
   isDeleted?: boolean
 }
