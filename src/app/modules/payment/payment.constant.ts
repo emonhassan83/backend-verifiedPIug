@@ -1,5 +1,6 @@
 export const PAYMENT_STATUS = {
   unpaid: 'unpaid',
+  completed: 'completed',
   paid: 'paid',
   failed: 'failed',
   refunded: 'refunded',
