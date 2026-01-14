@@ -4,6 +4,7 @@ export const ORDER_STATUS = {
   completed: 'completed',
   cancelled: 'cancelled',
   denied: 'denied',
+  refunded: 'refunded',
 } as const
 
 export const PAYMENT_STATUS = {

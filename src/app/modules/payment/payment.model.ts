@@ -51,21 +51,4 @@ const paymentSchema = new Schema<TPayment>(
   },
 )
 
-paymentSchema.pre('find', function (next) {
-  //@ts-ignore
-  this.find({ isDeleted: { $ne: true } })
-  next()
-})
-
-paymentSchema.pre('findOne', function (next) {
-  //@ts-ignore
-  this.find({ isDeleted: { $ne: true } })
-  next()
-})
-
-paymentSchema.pre('aggregate', function (next) {
-  this.pipeline().unshift({ $match: { isDeleted: { $ne: true } } })
-  next()
-})
-
 export const Payment = model<TPayment>('Payment', paymentSchema)

@@ -1,6 +1,6 @@
 import { Schema, model } from 'mongoose'
 import { TRefund, TRefundModel } from './refund.interface'
-import { REFUND_STATUS } from './refund.constant'
+import { REFUND_AUTHORITY, REFUND_STATUS } from './refund.constant'
 
 const refundSchema = new Schema<TRefund>(
   {
@@ -14,6 +14,11 @@ const refundSchema = new Schema<TRefund>(
       ref: 'User',
       required: true,
     },
+    authority: {
+      type: String,
+      enum: Object.values(REFUND_AUTHORITY),
+      required: true,
+    },
     order: {
       type: Schema.Types.ObjectId,
       ref: 'Order',
@@ -25,6 +30,7 @@ const refundSchema = new Schema<TRefund>(
       enum: Object.values(REFUND_STATUS),
       default: REFUND_STATUS.pending,
     },
+    processedAt: { type: Date },
     isDeleted: { type: Boolean, default: false },
   },
   {
