@@ -1,7 +1,7 @@
 import { model, Schema } from 'mongoose'
 import { PAYMENT_MODEL_TYPE, TPayment } from './payment.interface'
 import { generateCryptoString } from '../../utils/generateCryptoString'
-import { PAYMENT_STATUS } from './payment.constant'
+import { PAYMENT_STATUS, PAYMENT_TYPE } from './payment.constant'
 
 const paymentSchema = new Schema<TPayment>(
   {
@@ -14,6 +14,11 @@ const paymentSchema = new Schema<TPayment>(
       type: String,
       enum: Object.values(PAYMENT_MODEL_TYPE),
       required: true,
+    },
+    type: {
+      type: String,
+      enum: Object.values(PAYMENT_TYPE),
+      default: PAYMENT_TYPE.full,
     },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     reference: {

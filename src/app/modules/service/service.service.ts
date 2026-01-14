@@ -161,58 +161,63 @@ const updateAIntoDB = async (
   payload: Partial<TService>,
   files: any,
 ) => {
-  const service = await Service.findById(id)
+  const service = await Service.findById(id);
   if (!service || service?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!');
   }
-
-  // Ensure files exist
-  const uploadedFiles = files?.files
 
   /* -------------------- LOCATION UPDATE -------------------- */
-  const latitude = (payload as any)?.latitude
-  const longitude = (payload as any)?.longitude
+  const latitude = (payload as any)?.latitude;
+  const longitude = (payload as any)?.longitude;
 
   if (latitude && longitude) {
-    const locationUrl = generateGoogleMapUrl(latitude, longitude)
+    const locationUrl = generateGoogleMapUrl(latitude, longitude);
 
-    payload.locationUrl = locationUrl
+    payload.locationUrl = locationUrl;
     payload.location = {
       type: 'Point',
-      coordinates: [longitude, latitude], // MongoDB standard
+      coordinates: [longitude, latitude], // MongoDB: [lng, lat]
+    };
+  }
+
+  // -------------------- Images Handling (Optional) --------------------
+  let finalImages = service.images || [];
+
+  const uploadedFiles = files?.files;
+
+  if (uploadedFiles && Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
+    const newImageUrls: string[] = [];
+
+    for (const file of uploadedFiles) {
+      const uploadedUrl = (await uploadToS3({
+        file,
+        fileName: `images/services/${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`,
+      })) as string;
+
+      newImageUrls.push(uploadedUrl);
     }
+
+    finalImages = [...finalImages, ...newImageUrls];
   }
 
-  // Upload all images
-  const imageUrls: string[] = []
- if (uploadedFiles && Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
-  for (const file of uploadedFiles) {
-    const uploadedUrl = (await uploadToS3({
-      file,
-      fileName: `images/services/${Date.now()}-${Math.floor(
-        100000 + Math.random() * 900000,
-      )}`,
-    })) as string
+  // payload-এ images
+  payload.images = finalImages;
 
-    imageUrls.push(uploadedUrl)
-  }
-}
-
-  // Assign to payload
-  payload.images = imageUrls
-
+  // -------------------- Final Update --------------------
   const result = await Service.findByIdAndUpdate(id, payload, {
     new: true,
-  })
+    runValidators: true,
+  });
+
   if (!result) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Service record not updated!',
-    )
+      'Service record not updated!'
+    );
   }
 
-  return result
-}
+  return result;
+};
 
 const changeStatusFromDB = async (id: string, payload: any) => {
   const { status } = payload

@@ -29,15 +29,20 @@ router.get(
 
 router.post('/webhook', PaymentControllers.handleWebhook)
 
-router.get('/', PaymentControllers.getAllPayments)
+router.get('/', auth(USER_ROLE.admin), PaymentControllers.getAllPayments)
 
 router.get(
   '/reference/:referenceId',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
   PaymentControllers.getAPaymentByReferenceId,
 )
 
-router.get('/:id', PaymentControllers.getAPayment)
+router.get('/:id', auth(USER_ROLE.admin), PaymentControllers.getAPayment)
 
-router.patch('/refound-payment', PaymentControllers.refundPayment)
+router.patch(
+  '/refound-payment',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  PaymentControllers.refundPayment,
+)
 
 export const PaymentRoutes = router
