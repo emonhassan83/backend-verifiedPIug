@@ -74,8 +74,8 @@ const orderSchema = new Schema<TOrder>(
     initialPayment: paymentSubSchema,
     finalPayment: paymentSubSchema,
 
-    startDate: { type: String },
-    endDate: { type: String },
+    startDate: { type: String, required: true, },
+    endDate: { type: String, required: true, },
     actualStartDate: { type: Date },
     actualEndDate: { type: Date },
 

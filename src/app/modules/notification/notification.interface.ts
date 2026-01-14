@@ -4,7 +4,7 @@ export enum modeType {
   Auth = 'Auth',
   User = 'User',
   Service = 'Service',
-  WaitList = 'WaitList',
+  Order = 'Order',
   Support = 'Support',
   Subscription = 'Subscription',
   Payment = 'Payment',

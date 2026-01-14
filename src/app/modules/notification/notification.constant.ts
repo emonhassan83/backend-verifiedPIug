@@ -16,9 +16,9 @@ export const messages = {
     denied: 'Service Denied ❌',
   },
 
-  waitList: {
-    promoteUser: 'WaitList protome a user !',
-    maxMembersIncrease: 'WaitList max member Increase',
+  order: {
+    newOrder: 'New Order Received !',
+    statusChanged: 'Order Status Updated',
   },
 
   support: {
