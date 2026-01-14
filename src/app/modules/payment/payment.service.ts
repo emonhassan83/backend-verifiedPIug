@@ -65,6 +65,7 @@ const checkout = async (payload: TPayment) => {
     )
   } else {
     payload.transactionId = transactionId
+    // @ts-ignore
     payload.amount = model.amount
     paymentData = await Payment.create(payload)
   }
