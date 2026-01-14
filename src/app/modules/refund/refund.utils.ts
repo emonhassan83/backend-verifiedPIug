@@ -14,7 +14,7 @@ export const refundAddNotifyToVendor = async (
 
   switch (action) {
     case 'ADDED':
-      message = messages.refundManagement.addRefund
+      message = messages.refund.addRequest
        description = `A refund request has been initiated by ${user?.name} for product ID ${refund?.product}.`
       break
     default:
@@ -42,7 +42,7 @@ export const refundChangeStatusNotifyToUser = async (
 
   switch (action) {
     case 'CHANGED_STATUS':
-      message = messages.refundManagement.refundStatusChange
+      message = messages.refund.changedStatus
       description = `The status of your refund request for product ID ${refund?.product} has been updated to "${refund?.status}".`
       break
     default:

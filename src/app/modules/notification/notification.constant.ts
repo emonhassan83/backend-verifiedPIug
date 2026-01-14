@@ -21,8 +21,9 @@ export const messages = {
     statusChanged: 'Order Status Updated',
   },
 
-  support: {
-    response: 'Your support message response',
+  refund: {
+    addRequest: 'Refound request added !',
+    changedStatus: 'Refound request added !',
   },
 
   subscription: {
