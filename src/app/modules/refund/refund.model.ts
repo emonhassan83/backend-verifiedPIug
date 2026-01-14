@@ -1,0 +1,35 @@
+import { Schema, model } from 'mongoose'
+import { TRefund, TRefundModel } from './refund.interface'
+import { REFUND_STATUS } from './refund.constant'
+
+const refundSchema = new Schema<TRefund>(
+  {
+    sender: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    receiver: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    order: {
+      type: Schema.Types.ObjectId,
+      ref: 'Order',
+      required: true,
+    },
+    reason: { type: String, required: true },
+    status: {
+      type: String,
+      enum: Object.values(REFUND_STATUS),
+      default: REFUND_STATUS.pending,
+    },
+    isDeleted: { type: Boolean, default: false },
+  },
+  {
+    timestamps: true,
+  },
+)
+
+export const Refund = model<TRefund, TRefundModel>('Refund', refundSchema)

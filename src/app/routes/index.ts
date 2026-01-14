@@ -25,6 +25,7 @@ import { SubscriptionRoutes } from '../modules/subscription/subscription.route'
 import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
 import { uploadRouter } from '../modules/uploads/route'
+import { RefundRoutes } from '../modules/refund/refund.route'
 
 const router = Router()
 
@@ -72,6 +73,10 @@ const moduleRoutes = [
   {
     path: '/orders',
     route: OrderRoutes,
+  },
+  {
+    path: '/refunds',
+    route: RefundRoutes,
   },
   {
     path: '/projects',
