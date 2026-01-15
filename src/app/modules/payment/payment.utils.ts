@@ -14,7 +14,7 @@ import { Package } from '../package/package.model'
 import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { Types } from 'mongoose'
-import * as crypto from 'crypto';
+import * as crypto from 'crypto'
 
 export const paystack = Paystack(config.paystack.secret_key)
 
@@ -192,7 +192,7 @@ export const handlePaystackWebhook = async (req: any) => {
       // Try to find subscription by transactionId first
       let subscription = await Subscription.findOne({
         user: user._id,
-        amount: plan.amount / 100
+        amount: plan.amount / 100,
       })
 
       // Fallback: Find by user and package if transactionId not found
@@ -384,7 +384,7 @@ export const handlePaystackWebhook = async (req: any) => {
         })
 
         const manageLink =
-        await getSubscriptionManagementLink(subscription_code)
+          await getSubscriptionManagementLink(subscription_code)
         await NotificationService.createNotificationIntoDB({
           receiver: subscription.user,
           message: messages.paymentManagement.paymentFailed,
@@ -459,8 +459,7 @@ export const cancelPaystackSubscription = async (
       },
     )
 
-    console.log({response});
-    
+    console.log({ response })
 
     if (response.data.status) {
       const isExpired =

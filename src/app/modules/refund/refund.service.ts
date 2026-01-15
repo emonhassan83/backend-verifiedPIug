@@ -31,7 +31,7 @@ const createRefundIntoDB = async (payload: TRefund, userId: string) => {
   if (!order || order?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
   }
-  if (order.status === ORDER_STATUS.cancelled) {
+  if (order.status !== ORDER_STATUS.cancelled) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
       'Only cancelled order eligible for refund!',
@@ -136,30 +136,30 @@ const updateRefundStatusFromDB = async (
   id: string,
   payload: { status: TRefundStatus },
 ) => {
-  const { status } = payload
+  const { status } = payload;
 
   // 1. Validate status
   if (!Object.values(REFUND_STATUS).includes(status)) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund status')
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund status');
   }
 
   // 2. Start transaction
-  const session = await startSession()
-  session.startTransaction()
+  const session = await startSession();
+  session.startTransaction();
 
   try {
     // 3. Find refund request
-    const refund = await Refund.findById(id).session(session)
+    const refund = await Refund.findById(id).session(session);
     if (!refund || refund.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found!')
+      throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found!');
     }
 
     // 4. Prevent invalid transitions
     if (refund.status !== REFUND_STATUS.pending) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        `Refund request already ${refund.status}. Cannot change status again.`,
-      )
+        `Refund request already ${refund.status}. Cannot change status again.`
+      );
     }
 
     // 6. If authority = "user" and status = "confirmed" → auto refund via Paystack
@@ -175,35 +175,34 @@ const updateRefundStatusFromDB = async (
         type: PAYMENT_TYPE.initial,
         isPaid: true,
         isDeleted: false,
-      }).session(session)
+      }).session(session);
 
       if (!payment || !payment.transactionId) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'No payment found for this order to refund',
-        )
+          'No payment found for this order to refund'
+        );
       }
 
       // Paystack-এ refund করো
       const refundResponse = await refundPaystackPayment(
-        Number(payment.transactionId),
-        `Refund requested by user for order ${refund.order}`,
-      )
+        Number(payment.paymentIntentId),
+        `Refund requested by user for order ${refund.order}`
+      );
+
       if (!refundResponse?.status) {
         throw new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
-          'Paystack refund failed',
-        )
+          'Paystack refund failed'
+        );
       }
 
       // Update payment status to refunded
       await Payment.findOneAndUpdate(
         { _id: payment._id },
-        {
-          status: PAYMENT_STATUS.refunded
-        },
-        { session },
-      )
+        { status: PAYMENT_STATUS.refunded },
+        { session }
+      );
 
       // Update order refund fields
       await Order.findByIdAndUpdate(
@@ -213,18 +212,21 @@ const updateRefundStatusFromDB = async (
           pendingAmount: 0,
           status: ORDER_STATUS.refunded,
           initialPayment: {
-            status: PAYMENT_STATUS.refunded
+            status: PAYMENT_STATUS.refunded,
           },
         },
-        { session },
-      )
+        { session }
+      );
 
-      // Optional: Reduce received in project if linked
-      await Project.findOneAndUpdate(
+      // Fix: Project received update 
+     await Project.findOneAndUpdate(
         { order: refund.order },
-        { $inc: { received: -payment.amount },  received: 0, status: PROJECT_STATUS.refunded },
-        { session },
-      )
+        {
+          $inc: { received: -payment.amount }, // শুধু subtract করো
+          status: PROJECT_STATUS.refunded,
+        },
+        { session, new: true }
+      );
     }
 
     // 7. Update refund status
@@ -234,34 +236,32 @@ const updateRefundStatusFromDB = async (
         status,
         processedAt: new Date(),
       },
-      { new: true, session },
-    )
+      { new: true, session }
+    );
+
     if (!updatedRefund) {
-      throw new AppError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Refund update failed',
-      )
+      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Refund update failed');
     }
 
     // 8. Notify user
-    const user = await User.findById(refund.sender).session(session)
+    const user = await User.findById(refund.sender).session(session);
     if (user) {
-      await refundChangeStatusNotifyToUser('CHANGED_STATUS', user, updatedRefund)
+      await refundChangeStatusNotifyToUser('CHANGED_STATUS', user, updatedRefund);
     }
 
-    await session.commitTransaction()
-    session.endSession()
+    await session.commitTransaction();
+    session.endSession();
 
-    return updatedRefund
+    return updatedRefund;
   } catch (error: any) {
-    await session.abortTransaction()
-    session.endSession()
+    await session.abortTransaction();
+    session.endSession();
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      error.message || 'Failed to update refund status',
-    )
+      error.message || 'Failed to update refund status'
+    );
   }
-}
+};
 
 const deleteARefundFromDB = async (id: string) => {
   const refund = await Refund.findById(id)
@@ -269,6 +269,12 @@ const deleteARefundFromDB = async (id: string) => {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'This Refund request is not found !',
+    )
+  }
+  if (refund.status !== REFUND_STATUS.pending) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Only pending refund eligible for deleted!',
     )
   }
 

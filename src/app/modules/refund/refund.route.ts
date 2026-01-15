@@ -15,7 +15,7 @@ router.post(
 )
 
 router.patch(
-  '/:id',
+  '/status/:id',
   auth(USER_ROLE.vendor, USER_ROLE.planer),
   RefundControllers.changeRefundStatus,
 )
