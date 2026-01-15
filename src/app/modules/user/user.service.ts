@@ -63,7 +63,7 @@ const registerUserIntoDB = async (payload: TUser) => {
 const getAllUsersFromDB = async (query: Record<string, unknown>) => {
   const usersQuery = new QueryBuilder(
     User.find({ isDeleted: false, role: { $ne: USER_ROLE.admin } }).select(
-      '_id id name email photoUrl address city country categories status createdAt',
+      '_id id name email photoUrl role address city country categories status createdAt',
     ),
     query,
   )
