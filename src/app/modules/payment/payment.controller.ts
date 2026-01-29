@@ -29,28 +29,6 @@ const confirmPayment = catchAsync(async (req, res) => {
   })
 })
 
-const cancelSubscription = catchAsync(async (req, res) => {
-  const result = await PaymentService.cancelSubscription(req.params.subscriptionId, req.user._id)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: 'Auto renew subscription cancel successfully!',
-    data: result,
-  })
-})
-
-const enableSubscription = catchAsync(async (req, res) => {
-  const result = await PaymentService.enableSubscription(req.params.subscriptionId, req.user._id)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: httpStatus.OK,
-    message: 'Auto renew subscription enable successfully!',
-    data: result,
-  })
-})
-
 const handleWebhook = catchAsync(async (req, res) => {
   const result = await PaymentService.handleWebhook(req);
 
@@ -121,8 +99,6 @@ const refundPayment = catchAsync(async (req, res) => {
 export const PaymentControllers = {
   checkout,
   confirmPayment,
-  cancelSubscription,
-  enableSubscription,
   handleWebhook,
   getAllPayments,
   getDashboardData,

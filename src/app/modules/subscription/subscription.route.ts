@@ -20,10 +20,16 @@ router.patch(
   subscriptionController.updateSubscription,
 )
 
-router.delete(
-  '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor),
-  subscriptionController.deleteSubscription,
+router.get(
+  '/cancel/:subscriptionId',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  subscriptionController.cancelSubscription,
+)
+
+router.get(
+  '/enable/:subscriptionId',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  subscriptionController.enableSubscription,
 )
 
 router.get(

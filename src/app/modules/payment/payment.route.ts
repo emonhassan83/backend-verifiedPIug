@@ -15,18 +15,6 @@ router.post(
 
 router.get('/confirm-payment', PaymentControllers.confirmPayment)
 
-router.get(
-  '/cancel/:subscriptionId',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  PaymentControllers.cancelSubscription,
-)
-
-router.get(
-  '/enable/:subscriptionId',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
-  PaymentControllers.enableSubscription,
-)
-
 router.post('/webhook', PaymentControllers.handleWebhook)
 
 router.get('/', auth(USER_ROLE.admin), PaymentControllers.getAllPayments)

@@ -6,9 +6,17 @@ import { TSubscriptions } from './subscription.interface'
 import { Package } from '../package/package.model'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
-import { subscriptionNotifyToUser } from './subscription.utils'
+import {
+  cancelPaystackSubscription,
+  enablePaystackSubscription,
+  subscriptionNotifyToUser,
+} from './subscription.utils'
 import { Subscription } from './subscription.models'
-import { PAYMENT_STATUS } from './subscription.constants'
+import {
+  PAYMENT_STATUS,
+  RENEW_STATUS,
+  SUBSCRIPTION_STATUS,
+} from './subscription.constants'
 
 export const startSubscriptionCron = () => {
   cron.schedule('0 */12 * * *', async () => {
@@ -29,14 +37,10 @@ export const startSubscriptionCron = () => {
       })
 
       for (const subscription of expiringToday) {
-        const packageData = await Package.findById(subscription.package)
-        if (packageData) {
-          await subscriptionNotifyToUser(
-            'WARNING',
-            packageData,
-            subscription,
-            subscription.user,
-          )
+        const user = await User.findById(subscription.user).select('fcmToken')
+
+        if (user && user?.fcmToken) {
+          await subscriptionNotifyToUser('WARNING', subscription, user)
         }
       }
 
@@ -204,22 +208,98 @@ const updateSubscription = async (
   return result
 }
 
-const deleteSubscription = async (id: string) => {
-  const subscription = await Subscription.findById(id)
-  if (!subscription || subscription?.isDeleted) {
-    throw new Error('Failed to update subscription')
+const cancelSubscription = async (subscriptionId: string, userId: string) => {
+  const sub = await Subscription.findOne({
+    _id: subscriptionId,
+    user: userId,
+    status: { $ne: SUBSCRIPTION_STATUS.cancelled },
+    isDeleted: false,
+  })
+  if (!sub) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
   }
 
+  if (!sub.subscriptionCode || !sub.emailToken) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Subscription code or email token is missing!',
+    )
+  }
+
+  await cancelPaystackSubscription(sub.subscriptionCode, sub.emailToken)
+
+  // Update subscription status in the database
   const result = await Subscription.findByIdAndUpdate(
-    id,
-    { isDeleted: true },
+    subscriptionId,
+    {
+      autoRenew: RENEW_STATUS.disabled,
+    },
     { new: true },
   )
-  if (!result) {
-    throw new Error('Failed to delete subscription')
+
+  // Find user to notify
+  const user = await User.findById(sub.user).select('fcmToken')
+
+  // Create a notification entry
+  if (user && user?.fcmToken) {
+    await subscriptionNotifyToUser('CANCELLED', sub, user)
   }
 
   return result
+}
+
+const enableSubscription = async (subscriptionId: string, userId: string) => {
+  const sub = await Subscription.findOne({
+    _id: subscriptionId,
+    user: userId,
+    status: { $ne: SUBSCRIPTION_STATUS.cancelled },
+    isDeleted: false,
+  })
+  if (!sub) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
+  }
+
+  if (!sub.subscriptionCode || !sub.emailToken) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Subscription code or email token is missing!',
+    )
+  }
+
+  const result = await enablePaystackSubscription(
+    sub.subscriptionCode,
+    sub.emailToken,
+  )
+
+  // Return authorization URL for redirect
+  if (result.authorizationUrl) {
+    return {
+      status: 'pending',
+      message: 'Please complete the payment to enable auto-renew.',
+      authorizationUrl: result.authorizationUrl,
+    }
+  }
+
+  // Update subscription status in the database
+  const updated = await Subscription.findByIdAndUpdate(
+    subscriptionId,
+    {
+      autoRenew: RENEW_STATUS.active,
+      status: SUBSCRIPTION_STATUS.active,
+      isExpired: false,
+    },
+    { new: true },
+  )
+
+  // Find user to notify
+  const user = await User.findById(sub.user).select('fcmToken')
+
+  // Create a notification entry
+  if (user && user?.fcmToken) {
+    await subscriptionNotifyToUser('CANCELLED', sub, user)
+  }
+
+  return updated
 }
 
 export const subscriptionService = {
@@ -227,5 +307,6 @@ export const subscriptionService = {
   getAllSubscription,
   getSubscriptionById,
   updateSubscription,
-  deleteSubscription,
+  cancelSubscription,
+  enableSubscription,
 }

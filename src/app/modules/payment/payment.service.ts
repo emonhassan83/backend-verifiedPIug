@@ -4,10 +4,8 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { PAYMENT_MODEL_TYPE, TPayment } from './payment.interface'
 import { Payment } from './payment.model'
 import {
-  cancelPaystackSubscription,
   createPaystackCheckoutSession,
   createPaystackSubscriptionCheckout,
-  enablePaystackSubscription,
   handlePaystackWebhook,
   paymentNotifyToAdmin,
   paymentNotifyToUser,
@@ -22,9 +20,6 @@ import { TSubscriptions } from '../subscription/subscription.interface'
 import { Subscription } from '../subscription/subscription.models'
 import { User } from '../user/user.model'
 import { Package } from '../package/package.model'
-import { NotificationService } from '../notification/notification.service'
-import { messages } from '../notification/notification.constant'
-import { modeType } from '../notification/notification.interface'
 import { TOrder } from '../order/order.interface'
 import { Order } from '../order/order.models'
 import { ORDER_STATUS } from '../order/order.constants'
@@ -352,125 +347,6 @@ const confirmPayment = async (query: Record<string, any>) => {
   }
 }
 
-const cancelSubscription = async (subscriptionId: string, userId: string) => {
-  const subscription = await Subscription.findById(subscriptionId)
-  if (!subscription) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
-  }
-
-  if (subscription.user.toString() !== userId) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'You are not authorized to cancel this subscription!',
-    )
-  }
-
-  if (subscription.status === 'cancelled') {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Subscription is already cancelled!',
-    )
-  }
-
-  if (!subscription.subscriptionCode) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Subscription code is missing!')
-  }
-
-  if (!subscription.emailToken) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Email token is missing for this subscription!',
-    )
-  }
-
-  await cancelPaystackSubscription(
-    subscription.subscriptionCode,
-    subscription.emailToken,
-  )
-
-  // Update subscription status in the database
-  const updatedSubscription = await Subscription.findByIdAndUpdate(
-    subscriptionId,
-    {
-      autoRenew: 'disabled',
-    },
-    { new: true },
-  )
-  console.log({ updatedSubscription })
-
-  // Notify user
-  await NotificationService.createNotificationIntoDB({
-    receiver: userId,
-    message: messages.subscription.cancelled,
-    description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
-    reference: subscriptionId,
-    model_type: modeType.Subscription,
-  })
-
-  return updatedSubscription
-}
-
-const enableSubscription = async (subscriptionId: string, userId: string) => {
-  const subscription = await Subscription.findById(subscriptionId)
-  if (!subscription) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
-  }
-
-  if (subscription.user.toString() !== userId) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'You are not authorized to cancel this subscription!',
-    )
-  }
-
-  if (!subscription.subscriptionCode) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Subscription code is missing!')
-  }
-
-  if (!subscription.emailToken) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Email token is missing for this subscription!',
-    )
-  }
-
-  const result = await enablePaystackSubscription(
-    subscription.subscriptionCode,
-    subscription.emailToken,
-  )
-
-  if (result.authorizationUrl) {
-    // Return authorization URL for redirect
-    return {
-      status: 'pending',
-      message: 'Please complete the payment to enable auto-renew.',
-      authorizationUrl: result.authorizationUrl,
-    }
-  }
-
-  // Update subscription status in the database
-  const updatedSubscription = await Subscription.findByIdAndUpdate(
-    subscriptionId,
-    {
-      autoRenew: 'active',
-      status: 'active',
-      isExpired: false,
-    },
-    { new: true },
-  )
-
-  // Notify user
-  await NotificationService.createNotificationIntoDB({
-    receiver: userId,
-    message: messages.subscription.cancelled,
-    description: `Your subscription (${subscription.subscriptionCode}) has been cancelled successfully.`,
-    reference: subscriptionId,
-    model_type: modeType.Subscription,
-  })
-
-  return updatedSubscription
-}
-
 const handleWebhook = async (req: any) => {
   const result = await handlePaystackWebhook(req)
   return result
@@ -605,8 +481,6 @@ const refundPayment = async (payload: any) => {
 export const PaymentService = {
   checkout,
   confirmPayment,
-  cancelSubscription,
-  enableSubscription,
   handleWebhook,
   getAllPaymentsFromDB,
   getDashboardDataFromDB,

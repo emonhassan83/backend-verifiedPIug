@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import catchAsync from '../../utils/catchAsync'
 import { subscriptionService } from './subscription.service'
 import sendResponse from '../../utils/sendResponse'
+import httpStatus from 'http-status'
 
 const createSubscription = catchAsync(async (req: Request, res: Response) => {
   req.body.user = req?.user?._id
@@ -66,13 +67,24 @@ const updateSubscription = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const deleteSubscription = catchAsync(async (req: Request, res: Response) => {
-  const result = await subscriptionService.deleteSubscription(req.params.id)
+const cancelSubscription = catchAsync(async (req, res) => {
+  const result = await subscriptionService.cancelSubscription(req.params.subscriptionId, req.user._id)
 
   sendResponse(res, {
-    statusCode: 200,
     success: true,
-    message: 'Subscription deleted successfully',
+    statusCode: httpStatus.OK,
+    message: 'Auto renew subscription cancel successfully!',
+    data: result,
+  })
+})
+
+const enableSubscription = catchAsync(async (req, res) => {
+  const result = await subscriptionService.enableSubscription(req.params.subscriptionId, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: httpStatus.OK,
+    message: 'Auto renew subscription enable successfully!',
     data: result,
   })
 })
@@ -82,6 +94,7 @@ export const subscriptionController = {
   getAllSubscription,
   getSubscriptionById,
   updateSubscription,
-  deleteSubscription,
   getMySubscription,
+  cancelSubscription,
+  enableSubscription,
 }
