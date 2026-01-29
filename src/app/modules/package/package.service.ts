@@ -4,32 +4,62 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TPackage } from './package.interface'
 import { Package } from './package.model'
 import { PackageSearchableFields } from './package.constant'
+import {
+  archivePaystackPlan,
+  createPaystackPlan,
+  updatePaystackPlan,
+} from './package.utils'
+import { startSession } from 'mongoose'
 
 const createPackageIntoDB = async (payload: TPackage) => {
-  const { type, billingCycle } = payload;
+  const session = await startSession();
+  try {
+    await session.startTransaction();
 
-  // 1. Check if same combination already exists
-  const existing = await Package.findOne({
-    type,
-    billingCycle,
-    isDeleted: false,
-  });
+    const { type, billingCycle, title, price } = payload;
 
-  if (existing) {
+    // ১. একই ধরনের প্যাকেজ আছে কিনা চেক
+    const existing = await Package.findOne({
+      type,
+      billingCycle,
+      isDeleted: false,
+    }).session(session);
+
+    if (existing) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        `A package with type "${type}" and billing cycle "${billingCycle}" already exists!`
+      );
+    }
+
+    // ২. Paystack-এ প্ল্যান তৈরি করা (শুধু এখানেই)
+    const planCode = await createPaystackPlan({
+      name: title,
+      amount: price,
+      interval: billingCycle,
+    });
+
+    // ৩. planCode যোগ করা
+    payload.planCode = planCode;
+
+    // ৪. ডাটাবেসে প্যাকেজ সেভ
+    const newPackage = await Package.create([payload], { session });
+    if (!newPackage[0]) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Package creation failed!');
+    }
+
+    await session.commitTransaction();
+    return newPackage[0];
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Package creation failed:', error);
     throw new AppError(
-      httpStatus.CONFLICT,
-      `A package with type "${type}" and billing cycle "${billingCycle}" already exists!`
+      httpStatus.INTERNAL_SERVER_ERROR,
+      error.message || 'Package creation failed'
     );
+  } finally {
+    session.endSession();
   }
-
-  // 2. Create new package
-  const newPackage = await Package.create(payload);
-
-  if (!newPackage) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Package creation failed!');
-  }
-
-  return newPackage;
 };
 
 const getAllPackagesFromDB = async (query: Record<string, unknown>) => {
@@ -61,41 +91,85 @@ const getAPackageFromDB = async (id: string) => {
   return result
 }
 
-const updatePackageFromDB = async (id: string, payload: any) => {
-  const packages = await Package.findById(id)
-  if (!packages || packages?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Packages not found')
-  }
+const updatePackageFromDB = async (id: string, payload: Partial<TPackage>) => {
+  const session = await startSession()
+  try {
+    await session.startTransaction()
 
-  const updatePackage = await Package.findByIdAndUpdate(id, payload, {
-    new: true,
-  })
-  if (!updatePackage) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Packages not updated')
-  }
+    const packageData = await Package.findById(id).session(session)
+    if (!packageData || packageData?.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Package not found')
+    }
 
-  return updatePackage
+    // Update plan in Paystack if name, price, or interval changes
+    if (payload.title || payload.price || payload.billingCycle) {
+      await updatePaystackPlan(packageData.planCode, {
+        name: payload.title || packageData.title,
+        amount: payload.price || packageData.price,
+        interval: payload.billingCycle || packageData.billingCycle,
+      })
+    }
+
+    // Update package in database
+    const updatedPackage = await Package.findByIdAndUpdate(id, payload, {
+      session,
+      new: true,
+    })
+
+    if (!updatedPackage) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Package update failed')
+    }
+
+    await session.commitTransaction()
+    return updatedPackage
+  } catch (error: any) {
+    await session.abortTransaction()
+    console.error('Package update error:', error.message)
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      error.message || 'Package update failed',
+    )
+  } finally {
+    session.endSession()
+  }
 }
 
 const deleteAPackageFromDB = async (id: string) => {
-  const packages = await Package.findById(id)
-  if (!packages || packages?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Packages not found')
+  const session = await startSession()
+  try {
+    await session.startTransaction()
+
+    const packageData = await Package.findById(id).session(session)
+    if (!packageData || packageData?.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Package not found')
+    }
+
+    // Archive plan in Paystack
+    await archivePaystackPlan(packageData.planCode)
+
+    // Delete package in database (soft delete)
+    const result = await Package.findByIdAndUpdate(
+      id,
+      { isDeleted: true },
+      { session, new: true },
+    )
+
+    if (!result) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Package delete failed')
+    }
+
+    await session.commitTransaction()
+    return result
+  } catch (error: any) {
+    await session.abortTransaction()
+    console.error('Package delete error:', error.message)
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      error.message || 'Package delete failed',
+    )
+  } finally {
+    session.endSession()
   }
-
-  const result = await Package.findByIdAndUpdate(
-    id,
-    {
-      isDeleted: true,
-    },
-    { new: true },
-  )
-
-  if (!result) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Packages Delete failed!')
-  }
-
-  return result
 }
 
 export const PackageService = {

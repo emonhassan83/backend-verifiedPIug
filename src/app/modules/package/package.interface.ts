@@ -1,10 +1,11 @@
 import { Model } from 'mongoose'
-import { TDurationType, TPackageType } from './package.constant'
+import { TAudience, TDurationType, TPackageType } from './package.constant'
 
 export type TPackage = {
   _id?: string
   title: string
   type: TPackageType
+  audience: TAudience[]
   billingCycle: TDurationType
   description: string[]
   price: number

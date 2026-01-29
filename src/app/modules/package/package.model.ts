@@ -1,11 +1,16 @@
 import { Schema, model } from 'mongoose'
 import { TPackage, TPackageModel } from './package.interface'
-import { DURATION_TYPE, PACKAGE_TYPE } from './package.constant'
+import { AUDIENCE, DURATION_TYPE, PACKAGE_TYPE } from './package.constant'
 
 const packageSchema = new Schema<TPackage>(
   {
     title: { type: String, required: true },
     type: { type: String, enum: Object.values(PACKAGE_TYPE), required: true },
+    audience: {
+      type: [String],
+      enum: Object.values(AUDIENCE),
+      required: true,
+    },
     billingCycle: {
       type: String,
       enum: Object.values(DURATION_TYPE),

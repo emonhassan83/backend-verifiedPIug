@@ -13,7 +13,7 @@ import { User } from '../user/user.model'
 import { Package } from '../package/package.model'
 import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
-import { Types } from 'mongoose'
+import { startSession, Types } from 'mongoose'
 import * as crypto from 'crypto'
 
 export const paystack = Paystack(config.paystack.secret_key)
@@ -41,33 +41,6 @@ interface TSubscriptionPayload {
 const PLAN_CODES = {
   annual: 'PLN_u07uqjczfxjenxv', // Annual plan
   monthly: 'PLN_snv6mai308v6itr', // Monthly plan
-}
-
-// Create a Paystack plan
-export const createPaystackPlan = async (packageData: {
-  title: string
-  price: number
-  billingCycle: string
-}) => {
-  try {
-    const response = await paystack.plan.create({
-      name: packageData.title,
-      amount: packageData.price * 100, // Convert to kobo
-      interval: packageData.billingCycle.toLowerCase(), // e.g., 'monthly', 'yearly'
-      currency: 'NGN', // Adjust based on your needs
-    })
-
-    if (!response.status) {
-      throw new Error('Failed to create Paystack plan')
-    }
-
-    return response.data.plan_code // e.g., PLN_xxxxxxxxxxx
-  } catch (error: any) {
-    throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      error?.response?.data?.message || 'Paystack plan creation failed',
-    )
-  }
 }
 
 // Initialize subscription checkout
@@ -174,233 +147,383 @@ export const handlePaystackWebhook = async (req: any) => {
     .digest('hex')
 
   if (hash !== signature) {
+    console.error('Invalid webhook signature')
     throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid webhook signature')
   }
 
   const event = req.body
-  switch (event.event) {
-    case 'subscription.create': {
-      const { subscription_code, email_token, customer, plan } = event.data
-      const user = await User.findOne({ email: customer.email })
-      if (!user) {
-        throw new AppError(
-          httpStatus.NOT_FOUND,
-          'User not found for subscription',
-        )
-      }
+  const session = await startSession()
 
-      // Try to find subscription by transactionId first
-      let subscription = await Subscription.findOne({
-        user: user._id,
-        amount: plan.amount / 100,
-      })
+  try {
+    await session.startTransaction()
 
-      // Fallback: Find by user and package if transactionId not found
-      if (!subscription) {
-        subscription = await Subscription.findOne({
-          user: user._id,
-          package: { $exists: true },
-          paymentStatus: 'paid',
-          createdAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) }, // Last 5 minutes
-        })
-      }
-
-      if (!subscription) {
-        console.warn(
-          `Subscription not found for user ${user._id}, plan ${plan.plan_code}, email ${customer.email}`,
-        )
-        throw new AppError(
-          httpStatus.NOT_FOUND,
-          `Subscription not found for user ${user._id} and plan ${plan.plan_code}`,
-        )
-      }
-
-      await Subscription.findByIdAndUpdate(
-        subscription._id,
-        {
-          subscriptionCode: subscription_code,
-          emailToken: email_token,
-          status: 'active',
-          createdAt: new Date(event.data.createdAt),
-        },
-        { new: true },
-      )
-
-      await NotificationService.createNotificationIntoDB({
-        receiver: user._id,
-        message: messages.subscription.newPlan,
-        description: `Your ${plan.name} subscription has been activated with code ${subscription_code}.`,
-        reference: subscription._id,
-        model_type: modeType.Subscription,
-      })
-      break
-    }
-
-    case 'invoice.create': {
-      const { subscription_code, amount, due_date } = event.data
-
-      const subscription = await Subscription.findOne({
-        subscriptionCode: subscription_code,
-      })
-      if (subscription) {
-        await NotificationService.createNotificationIntoDB({
-          receiver: subscription.user,
-          message: messages.paymentManagement.upcomingCharge,
-          description: `Your subscription will be charged ₦${amount / 100} on ${new Date(due_date).toLocaleDateString()}.`,
-          reference: subscription._id,
-          model_type: modeType.Subscription,
-        })
-      }
-      break
-    }
-
+    switch (event.event) {
+      // ──────────────────────────────────────────────
+      // ১. চার্জ সফল হলে (পেমেন্ট সম্পন্ন)
+      // ──────────────────────────────────────────────
     case 'charge.success': {
-      const { subscription_code, amount, paid_at, reference, metadata } =
-        event.data
-      const subscription = await Subscription.findOne({
-        subscriptionCode: subscription_code,
-      })
-      if (!subscription) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found')
-      }
+        const { amount, paid_at, reference, metadata, customer, plan } =
+          event.data
+        console.log(
+          `[charge.success] ref: ${reference} | email: ${customer.email} | amount: ${amount}`,
+        )
 
-      const payment = await Payment.findOne({ transactionId: reference })
-      if (payment) {
-        await Payment.findByIdAndUpdate(payment._id, {
-          isPaid: true,
-          status: 'paid',
-          paymentIntentId: event.data.id,
-          amount: amount / 100,
-        })
+        const user = await User.findOne({ email: customer.email }).session(
+          session,
+        )
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found: ${customer.email}`,
+          )
+        }
 
-        await paymentNotifyToUser('SUCCESS', payment)
-        // await paymentNotifyToAdmin('SUCCESS', payment)
-      } else {
-        const newPayment = await Payment.create({
+        // সাবস্ক্রিপশন খোঁজা — transactionId দিয়ে সবচেয়ে নিরাপদ
+        let subscription = await Subscription.findOne({
+          user: user._id,
           transactionId: reference,
-          amount: amount / 100,
-          isPaid: true,
-          status: 'paid',
-          paymentIntentId: event.data.id,
-          account: subscription.user,
-          reference: subscription._id,
-          modelType: 'Subscription',
-        })
+          isDeleted: false,
+        }).session(session)
 
-        await paymentNotifyToUser('SUCCESS', newPayment)
-        // await paymentNotifyToAdmin('SUCCESS', newPayment)
-      }
+        // ফলব্যাক: সাম্প্রতিক pending/paid সাবস্ক্রিপশন
+        if (!subscription) {
+          subscription = await Subscription.findOne({
+            user: user._id,
+            paymentStatus: { $in: ['pending', 'paid'] },
+            createdAt: { $gte: new Date(Date.now() - 20 * 60 * 1000) },
+            isDeleted: false,
+          }).session(session)
+        }
 
-      const interval = event.data.plan.interval === 'annually' ? 12 : 1
-      await Subscription.findByIdAndUpdate(subscription._id, {
-        paymentStatus: 'paid',
-        expiredAt: new Date(paid_at).setMonth(
-          new Date(paid_at).getMonth() + interval,
-        ),
-        isExpired: false,
-      })
+        if (!subscription) {
+          console.warn(`No subscription found for transaction: ${reference}`)
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            'No matching subscription found for this payment',
+          )
+        }
 
-      await User.findByIdAndUpdate(subscription.user, {
-        packageExpiry: new Date(paid_at).setMonth(
-          new Date(paid_at).getMonth() + interval,
-        ),
-      })
-      break
-    }
+        // পেমেন্ট আপডেট
+        const payment = await Payment.findOne({
+          transactionId: reference,
+        }).session(session)
+        if (payment) {
+          await Payment.findByIdAndUpdate(
+            payment._id,
+            {
+              isPaid: true,
+              status: 'paid',
+              paymentIntentId: event.data.id,
+              amount: amount / 100,
+            },
+            { session, new: true },
+          )
+          await paymentNotifyToUser('SUCCESS', payment)
+        } else {
+          const newPayment = await Payment.create(
+            [
+              {
+                transactionId: reference,
+                amount: amount / 100,
+                isPaid: true,
+                status: 'paid',
+                paymentIntentId: event.data.id,
+                account: subscription.user,
+                reference: subscription._id,
+                modelType: 'Subscription',
+              },
+            ],
+            { session },
+          )
+          await paymentNotifyToUser('SUCCESS', newPayment[0])
+        }
 
-    case 'subscription.disable': {
-      const { subscription_code } = event.data
+        // সাবস্ক্রিপশন আপডেট
+        const interval = plan.interval === 'annually' ? 12 : 1
+        await Subscription.findByIdAndUpdate(
+          subscription._id,
+          {
+            paymentStatus: 'paid',
+            expiredAt: new Date(
+              new Date(paid_at).setMonth(
+                new Date(paid_at).getMonth() + interval,
+              ),
+            ),
+            isExpired: false,
+            status: 'active',
+            autoRenew: true,
+          },
+          { session, new: true },
+        )
 
-      const subscription = await Subscription.findOne({
-        subscriptionCode: subscription_code,
-      })
-      // console.log({subscription});
+        await User.findByIdAndUpdate(
+          user._id,
+          {
+            packageExpiry: new Date(
+              new Date(paid_at).setMonth(
+                new Date(paid_at).getMonth() + interval,
+              ),
+            ),
+          },
+          { session },
+        )
 
-      if (subscription) {
-        await Subscription.findByIdAndUpdate(subscription._id, {
-          autoRenew: 'disabled',
-        })
         await NotificationService.createNotificationIntoDB({
-          receiver: subscription.user,
-          message: messages.subscription.cancelled,
-          description: `Your subscription has been cancelled.`,
+          receiver: user._id,
+          message: messages.subscription.newPlan,
+          description: `Your ${plan.name} subscription has been activated.`,
           reference: subscription._id,
           model_type: modeType.Subscription,
         })
-      } else {
-        console.warn(
-          `Subscription not found for subscription_code: ${subscription_code}`,
-        )
-        throw new AppError(
-          httpStatus.NOT_FOUND,
-          `Subscription not found for code ${subscription_code}`,
-        )
-      }
-      break
-    }
 
-    case 'refund.processed': {
-      const { transaction_reference, amount, customer } = event.data
-      const payment = await Payment.findOne({
-        transactionId: transaction_reference,
-      })
-      if (payment) {
-        await Payment.findByIdAndUpdate(payment._id, {
-          status: 'refunded',
-          isPaid: false,
-        })
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // ২. সাবস্ক্রিপশন তৈরি হয়েছে (এখানেই subscription_code + email_token আসে)
+      // ──────────────────────────────────────────────
+      case 'subscription.create': {
+        const { subscription_code, email_token, customer, plan } = event.data
+        console.log(
+          `[subscription.create] code: ${subscription_code} | email: ${customer.email} | plan: ${plan.plan_code}`,
+        )
+
+        const user = await User.findOne({ email: customer.email }).session(
+          session,
+        )
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found: ${customer.email}`,
+          )
+        }
+
+        // সবচেয়ে নির্ভরযোগ্য উপায়: সাম্প্রতিক paid সাবস্ক্রিপশন খোঁজা
+        let subscription = await Subscription.findOne({
+          user: user._id,
+          paymentStatus: 'paid',
+          isDeleted: false,
+          createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // ৩০ মিনিটের মধ্যে
+        }).session(session)
+
+        // যদি না পাওয়া যায় তাহলে সবচেয়ে নতুন সাবস্ক্রিপশন নেওয়া
+        if (!subscription) {
+          subscription = await Subscription.findOne({
+            user: user._id,
+            isDeleted: false,
+          })
+            .sort({ createdAt: -1 })
+            .session(session)
+        }
+
+        if (!subscription) {
+          console.warn(
+            `No subscription found to associate for user ${user._id}`,
+          )
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            'No subscription found to associate with this webhook',
+          )
+        }
+
+        // আপডেট
+        await Subscription.findByIdAndUpdate(
+          subscription._id,
+          {
+            subscriptionCode: subscription_code,
+            emailToken: email_token,
+            status: 'active',
+            createdAt: new Date(event.data.createdAt),
+            autoRenew: true,
+          },
+          { session, new: true },
+        )
 
         await NotificationService.createNotificationIntoDB({
-          receiver: payment.user,
-          message: messages.paymentManagement.paymentRefunded,
-          description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
-          reference: payment._id,
-          model_type: modeType.Payment,
+          receiver: user._id,
+          message: messages.subscription.newPlan,
+          description: `Your ${plan.name} subscription has been activated with code ${subscription_code}.`,
+          reference: subscription._id,
+          model_type: modeType.Subscription,
         })
 
-        const admin = await findAdmin()
-        if (admin) {
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // ৩. পরবর্তী ইনভয়েস তৈরি হয়েছে
+      // ──────────────────────────────────────────────
+      case 'invoice.create': {
+        const { subscription_code, amount, due_date } = event.data
+        console.log(
+          `[invoice.create] subscription: ${subscription_code} | amount: ${amount}`,
+        )
+
+        const subscription = await Subscription.findOne({
+          subscriptionCode: subscription_code,
+        }).session(session)
+        if (subscription) {
           await NotificationService.createNotificationIntoDB({
-            receiver: admin._id,
+            receiver: subscription.user,
+            message: messages.paymentManagement.upcomingCharge,
+            description: `Your subscription will be charged ₦${amount / 100} on ${new Date(due_date).toLocaleDateString()}.`,
+            reference: subscription._id,
+            model_type: modeType.Subscription,
+          })
+        } else {
+          console.warn(`Subscription not found: ${subscription_code}`)
+        }
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // ৪. সাবস্ক্রিপশন ডিসেবল হয়েছে (auto-renew বন্ধ)
+      // ──────────────────────────────────────────────
+      case 'subscription.disable': {
+        const { subscription_code } = event.data
+        console.log(`[subscription.disable] code: ${subscription_code}`)
+
+        const subscription = await Subscription.findOne({
+          subscriptionCode: subscription_code,
+        }).session(session)
+        if (subscription) {
+          await Subscription.findByIdAndUpdate(
+            subscription._id,
+            {
+              status: 'cancelled',
+              autoRenew: false,
+              isExpired: true,
+            },
+            { session },
+          )
+
+          await NotificationService.createNotificationIntoDB({
+            receiver: subscription.user,
+            message: messages.subscription.cancelled,
+            description: `Your subscription ${subscription_code} auto-renew has been disabled.`,
+            reference: subscription._id,
+            model_type: modeType.Subscription,
+          })
+
+          const admin = await findAdmin()
+          if (admin) {
+            await NotificationService.createNotificationIntoDB({
+              receiver: admin._id,
+              message: messages.subscription.cancelled,
+              description: `Subscription ${subscription_code} auto-renew disabled for user ${subscription.user}.`,
+              reference: subscription._id,
+              model_type: modeType.Subscription,
+            })
+          }
+        } else {
+          console.warn(`Subscription not found: ${subscription_code}`)
+        }
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // ৫. রিফান্ড প্রসেসড
+      // ──────────────────────────────────────────────
+      case 'refund.processed': {
+        const { transaction_reference, amount, customer } = event.data
+        console.log(
+          `[refund.processed] ref: ${transaction_reference} | amount: ${amount}`,
+        )
+
+        const payment = await Payment.findOne({
+          transactionId: transaction_reference,
+        }).session(session)
+        if (payment) {
+          await Payment.findByIdAndUpdate(
+            payment._id,
+            {
+              status: 'refunded',
+              isPaid: false,
+            },
+            { session },
+          )
+
+          await NotificationService.createNotificationIntoDB({
+            receiver: payment.user,
             message: messages.paymentManagement.paymentRefunded,
             description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
             reference: payment._id,
             model_type: modeType.Payment,
           })
+
+          const admin = await findAdmin()
+          if (admin) {
+            await NotificationService.createNotificationIntoDB({
+              receiver: admin._id,
+              message: messages.paymentManagement.paymentRefunded,
+              description: `Refund of ₦${amount / 100} processed for transaction ${transaction_reference}.`,
+              reference: payment._id,
+              model_type: modeType.Payment,
+            })
+          }
         }
+        break
       }
-      break
+
+      // ──────────────────────────────────────────────
+      // ৬. ইনভয়েস পেমেন্ট ফেল হয়েছে
+      // ──────────────────────────────────────────────
+      case 'invoice.payment_failed': {
+        const { subscription_code, amount, customer } = event.data
+        console.log(
+          `[invoice.payment_failed] subscription: ${subscription_code} | amount: ${amount}`,
+        )
+
+        const subscription = await Subscription.findOne({
+          subscriptionCode: subscription_code,
+        }).session(session)
+        if (subscription) {
+          await Subscription.findByIdAndUpdate(
+            subscription._id,
+            {
+              paymentStatus: 'failed',
+              status: 'pending_payment',
+            },
+            { session },
+          )
+
+          const manageLink =
+            await getSubscriptionManagementLink(subscription_code)
+          await NotificationService.createNotificationIntoDB({
+            receiver: subscription.user,
+            message: messages.paymentManagement.paymentFailed,
+            description: `Your subscription payment of ₦${amount / 100} failed. Update payment method: ${manageLink}`,
+            reference: subscription._id,
+            model_type: modeType.Subscription,
+          })
+
+          const admin = await findAdmin()
+          if (admin) {
+            await NotificationService.createNotificationIntoDB({
+              receiver: admin._id,
+              message: messages.paymentManagement.paymentFailed,
+              description: `Subscription payment of ₦${amount / 100} failed for user ${customer.email}.`,
+              reference: subscription._id,
+              model_type: modeType.Subscription,
+            })
+          }
+        }
+        break
+      }
+
+      default:
+        console.log('Unhandled webhook event:', event.event)
     }
 
-    case 'invoice.payment_failed': {
-      const { subscription_code, amount, customer } = event.data
-      const subscription = await Subscription.findOne({
-        subscriptionCode: subscription_code,
-      })
-      if (subscription) {
-        await Subscription.findByIdAndUpdate(subscription._id, {
-          paymentStatus: 'failed',
-          status: 'pending_payment',
-        })
-
-        const manageLink =
-          await getSubscriptionManagementLink(subscription_code)
-        await NotificationService.createNotificationIntoDB({
-          receiver: subscription.user,
-          message: messages.paymentManagement.paymentFailed,
-          description: `Your subscription payment of ₦${amount / 100} failed. Please update your payment method: ${manageLink}`,
-          reference: subscription._id,
-          model_type: modeType.Subscription,
-        })
-      }
-      break
-    }
-
-    default:
-      console.log('Unhandled webhook event:', event.event)
+    await session.commitTransaction()
+    return { status: 'success' }
+  } catch (error: any) {
+    await session.abortTransaction()
+    console.error('Webhook processing error:', error.message)
+    return { status: 'error', message: error.message }
+  } finally {
+    session.endSession()
   }
-
-  return { status: 'success' }
 }
 
 // Generate subscription management link
