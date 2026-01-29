@@ -101,9 +101,6 @@ const createSubscription = async (payload: TSubscriptions) => {
     if (packages.billingCycle === 'annually') {
       expiredAt = new Date(now.getTime())
       expiredAt.setFullYear(expiredAt.getFullYear() + 1) // Adds 1 year
-    } else if (packages.billingCycle === 'halfYearly') {
-      expiredAt = new Date(now.getTime())
-      expiredAt.setFullYear(expiredAt.getMonth() + 6) // Adds 6 month
     } else if (packages.billingCycle === 'monthly') {
       expiredAt = new Date(now.getTime())
       expiredAt.setMonth(expiredAt.getMonth() + 1) // Adds 1 month

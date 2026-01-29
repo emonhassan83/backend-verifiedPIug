@@ -1,7 +1,7 @@
 import config from '../../config'
 import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
-import { TPayment } from './payment.interface'
+import { PAYMENT_MODEL_TYPE, TPayment } from './payment.interface'
 import { NotificationService } from '../notification/notification.service'
 import { findAdmin } from '../../utils/findAdmin'
 //@ts-ignore
@@ -15,6 +15,9 @@ import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { startSession, Types } from 'mongoose'
 import * as crypto from 'crypto'
+import { PAYMENT_STATUS } from './payment.constant'
+import { sendNotification } from '../../utils/sentNotification'
+import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 
 export const paystack = Paystack(config.paystack.secret_key)
 
@@ -37,12 +40,6 @@ interface TSubscriptionPayload {
   paymentId: Types.ObjectId | string
 }
 
-// Plan codes from Paystack
-const PLAN_CODES = {
-  annual: 'PLN_u07uqjczfxjenxv', // Annual plan
-  monthly: 'PLN_snv6mai308v6itr', // Monthly plan
-}
-
 // Initialize subscription checkout
 export const createPaystackSubscriptionCheckout = async (
   payload: TSubscriptionPayload,
@@ -57,44 +54,28 @@ export const createPaystackSubscriptionCheckout = async (
     )
   }
 
-  const subscription = await Subscription.findById(packageId).select('package')
-  if (!subscription) {
+  const sub = await Subscription.findById(packageId).select('package')
+  if (!sub || sub?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found')
   }
 
-  const packageData = await Package.findById(subscription?.package)
-  if (!packageData) {
+  const pkg = await Package.findById(sub.package)
+  if (!pkg) {
     throw new AppError(httpStatus.NOT_FOUND, 'Package not found')
-  }
-
-  // Map package billing cycle to Paystack plan code
-  const planCode =
-    packageData.billingCycle.toLowerCase() === 'annually'
-      ? PLAN_CODES.annual
-      : packageData.billingCycle.toLowerCase() === 'monthly'
-        ? PLAN_CODES.monthly
-        : null
-
-  if (!planCode) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Invalid billing cycle for package',
-    )
   }
 
   const response = await paystack.transaction.initialize({
     email: user.email,
-    amount: packageData.price * 100, // Convert to kobo
-    plan: planCode,
+    amount: pkg.price * 100, // Convert to kobo
+    plan: pkg.planCode,
     metadata: {
       name: user.name,
       paymentId,
-      product: packageData.title,
-      packageId: packageData._id,
+      product: pkg.title,
+      packageId: pkg._id,
     },
     callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${paymentId}`,
   })
-
   if (!response.status) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
@@ -161,7 +142,7 @@ export const handlePaystackWebhook = async (req: any) => {
       // ──────────────────────────────────────────────
       // ১. চার্জ সফল হলে (পেমেন্ট সম্পন্ন)
       // ──────────────────────────────────────────────
-    case 'charge.success': {
+      case 'charge.success': {
         const { amount, paid_at, reference, metadata, customer, plan } =
           event.data
         console.log(
@@ -189,7 +170,9 @@ export const handlePaystackWebhook = async (req: any) => {
         if (!subscription) {
           subscription = await Subscription.findOne({
             user: user._id,
-            paymentStatus: { $in: ['pending', 'paid'] },
+            paymentStatus: {
+              $in: [PAYMENT_STATUS.unpaid, PAYMENT_STATUS.paid],
+            },
             createdAt: { $gte: new Date(Date.now() - 20 * 60 * 1000) },
             isDeleted: false,
           }).session(session)
@@ -212,7 +195,7 @@ export const handlePaystackWebhook = async (req: any) => {
             payment._id,
             {
               isPaid: true,
-              status: 'paid',
+              status: PAYMENT_STATUS.paid,
               paymentIntentId: event.data.id,
               amount: amount / 100,
             },
@@ -226,11 +209,11 @@ export const handlePaystackWebhook = async (req: any) => {
                 transactionId: reference,
                 amount: amount / 100,
                 isPaid: true,
-                status: 'paid',
+                status: PAYMENT_STATUS.paid,
                 paymentIntentId: event.data.id,
                 account: subscription.user,
                 reference: subscription._id,
-                modelType: 'Subscription',
+                modelType: PAYMENT_MODEL_TYPE.Subscription,
               },
             ],
             { session },
@@ -268,13 +251,17 @@ export const handlePaystackWebhook = async (req: any) => {
           { session },
         )
 
-        await NotificationService.createNotificationIntoDB({
+        const notifyPayload = {
           receiver: user._id,
           message: messages.subscription.newPlan,
           description: `Your ${plan.name} subscription has been activated.`,
           reference: subscription._id,
           model_type: modeType.Subscription,
-        })
+        }
+
+        if (user?.fcmToken) {
+          await sendNotification([user.fcmToken], notifyPayload)
+        }
 
         break
       }
@@ -301,7 +288,7 @@ export const handlePaystackWebhook = async (req: any) => {
         // সবচেয়ে নির্ভরযোগ্য উপায়: সাম্প্রতিক paid সাবস্ক্রিপশন খোঁজা
         let subscription = await Subscription.findOne({
           user: user._id,
-          paymentStatus: 'paid',
+          paymentStatus: PAYMENT_STATUS.paid,
           isDeleted: false,
           createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // ৩০ মিনিটের মধ্যে
         }).session(session)
@@ -332,20 +319,24 @@ export const handlePaystackWebhook = async (req: any) => {
           {
             subscriptionCode: subscription_code,
             emailToken: email_token,
-            status: 'active',
+            status: SUBSCRIPTION_STATUS.active,
             createdAt: new Date(event.data.createdAt),
             autoRenew: true,
           },
           { session, new: true },
         )
 
-        await NotificationService.createNotificationIntoDB({
+        const notifyPayload = {
           receiver: user._id,
           message: messages.subscription.newPlan,
           description: `Your ${plan.name} subscription has been activated with code ${subscription_code}.`,
           reference: subscription._id,
           model_type: modeType.Subscription,
-        })
+        }
+
+        if (user?.fcmToken) {
+          await sendNotification([user.fcmToken], notifyPayload)
+        }
 
         break
       }
@@ -362,14 +353,25 @@ export const handlePaystackWebhook = async (req: any) => {
         const subscription = await Subscription.findOne({
           subscriptionCode: subscription_code,
         }).session(session)
-        if (subscription) {
-          await NotificationService.createNotificationIntoDB({
+
+        const user = await User.findById(subscription?.user).session(session)
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found for subscription: ${subscription_code}`,
+          )
+        }
+
+        if (subscription && user) {
+          const notifyPayload = {
             receiver: subscription.user,
             message: messages.paymentManagement.upcomingCharge,
             description: `Your subscription will be charged ₦${amount / 100} on ${new Date(due_date).toLocaleDateString()}.`,
             reference: subscription._id,
             model_type: modeType.Subscription,
-          })
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
         } else {
           console.warn(`Subscription not found: ${subscription_code}`)
         }
@@ -386,34 +388,46 @@ export const handlePaystackWebhook = async (req: any) => {
         const subscription = await Subscription.findOne({
           subscriptionCode: subscription_code,
         }).session(session)
-        if (subscription) {
+
+        const user = await User.findById(subscription?.user).session(session)
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found for subscription: ${subscription_code}`,
+          )
+        }
+
+        if (subscription && user) {
           await Subscription.findByIdAndUpdate(
             subscription._id,
             {
-              status: 'cancelled',
+              status: SUBSCRIPTION_STATUS.cancelled,
               autoRenew: false,
               isExpired: true,
             },
             { session },
           )
 
-          await NotificationService.createNotificationIntoDB({
+          const notifyPayload = {
             receiver: subscription.user,
             message: messages.subscription.cancelled,
             description: `Your subscription ${subscription_code} auto-renew has been disabled.`,
             reference: subscription._id,
             model_type: modeType.Subscription,
-          })
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
 
           const admin = await findAdmin()
-          if (admin) {
-            await NotificationService.createNotificationIntoDB({
+          if (admin && admin.fcmToken) {
+            const notifyPayload = {
               receiver: admin._id,
               message: messages.subscription.cancelled,
               description: `Subscription ${subscription_code} auto-renew disabled for user ${subscription.user}.`,
               reference: subscription._id,
               model_type: modeType.Subscription,
-            })
+            }
+            await sendNotification([admin.fcmToken], notifyPayload)
           }
         } else {
           console.warn(`Subscription not found: ${subscription_code}`)
@@ -433,33 +447,48 @@ export const handlePaystackWebhook = async (req: any) => {
         const payment = await Payment.findOne({
           transactionId: transaction_reference,
         }).session(session)
-        if (payment) {
+
+        const user = await User.findOne({ email: customer.email }).session(
+          session,
+        )
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found: ${customer.email}`,
+          )
+        }
+
+        if (payment && user) {
           await Payment.findByIdAndUpdate(
             payment._id,
             {
-              status: 'refunded',
+              status: PAYMENT_STATUS.refunded,
               isPaid: false,
             },
             { session },
           )
 
-          await NotificationService.createNotificationIntoDB({
+          const notifyPayload = {
             receiver: payment.user,
             message: messages.paymentManagement.paymentRefunded,
             description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
             reference: payment._id,
             model_type: modeType.Payment,
-          })
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
 
           const admin = await findAdmin()
-          if (admin) {
-            await NotificationService.createNotificationIntoDB({
+          if (admin && admin.fcmToken) {
+            const notifyPayload = {
               receiver: admin._id,
               message: messages.paymentManagement.paymentRefunded,
-              description: `Refund of ₦${amount / 100} processed for transaction ${transaction_reference}.`,
+              description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
               reference: payment._id,
               model_type: modeType.Payment,
-            })
+            }
+
+            await sendNotification([admin.fcmToken], notifyPayload)
           }
         }
         break
@@ -477,35 +506,49 @@ export const handlePaystackWebhook = async (req: any) => {
         const subscription = await Subscription.findOne({
           subscriptionCode: subscription_code,
         }).session(session)
-        if (subscription) {
+
+        const user = await User.findById(subscription?.user).session(session)
+        if (!user) {
+          throw new AppError(
+            httpStatus.NOT_FOUND,
+            `User not found for subscription: ${subscription_code}`,
+          )
+        }
+
+        if (subscription && user) {
           await Subscription.findByIdAndUpdate(
             subscription._id,
             {
-              paymentStatus: 'failed',
-              status: 'pending_payment',
+              paymentStatus: PAYMENT_STATUS.failed,
+              status: SUBSCRIPTION_STATUS.pending,
             },
             { session },
           )
 
           const manageLink =
             await getSubscriptionManagementLink(subscription_code)
-          await NotificationService.createNotificationIntoDB({
+
+          const notifyPayload = {
             receiver: subscription.user,
             message: messages.paymentManagement.paymentFailed,
             description: `Your subscription payment of ₦${amount / 100} failed. Update payment method: ${manageLink}`,
             reference: subscription._id,
             model_type: modeType.Subscription,
-          })
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
 
           const admin = await findAdmin()
-          if (admin) {
-            await NotificationService.createNotificationIntoDB({
+          if (admin && admin.fcmToken) {
+            const notifyPayload = {
               receiver: admin._id,
               message: messages.paymentManagement.paymentFailed,
               description: `Subscription payment of ₦${amount / 100} failed for user ${customer.email}.`,
               reference: subscription._id,
               model_type: modeType.Subscription,
-            })
+            }
+
+            await sendNotification([user.fcmToken], notifyPayload)
           }
         }
         break
@@ -866,6 +909,7 @@ export const paymentNotifyToAdmin = async (
   payment: TPayment,
 ) => {
   const admin = await findAdmin()
+  if (!admin || !admin.fcmToken) return
 
   // Define message and description based on type
   const message =
@@ -879,19 +923,24 @@ export const paymentNotifyToAdmin = async (
       : `A refund of $${payment.amount} has been successfully processed. Refund Transaction ID: ${payment.transactionId}.`
 
   // Create a notification entry
-  await NotificationService.createNotificationIntoDB({
+  const notifyPayload = {
     receiver: admin?._id,
     message,
     description,
     reference: payment.reference,
     model_type: modeType.Payment,
-  })
+  }
+
+  await sendNotification([admin.fcmToken], notifyPayload)
 }
 
 export const paymentNotifyToUser = async (
   type: 'SUCCESS' | 'REFUND',
   payment: TPayment,
 ) => {
+  const user = await User.findById(payment.user)
+  if (!user || !user.fcmToken) return
+
   // Define message and description based on type
   const message =
     type === 'SUCCESS'
@@ -904,11 +953,13 @@ export const paymentNotifyToUser = async (
       : `A refund of $${payment.amount} has been issued to your account. Refund Transaction ID: ${payment.transactionId}.`
 
   // Create a notification entry
-  await NotificationService.createNotificationIntoDB({
+  const notifyPayload = {
     receiver: payment?.user,
     message,
     description,
     reference: payment.reference,
     model_type: modeType.Payment,
-  })
+  }
+
+  await sendNotification([user.fcmToken], notifyPayload)
 }
