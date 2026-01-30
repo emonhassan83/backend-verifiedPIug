@@ -9,6 +9,7 @@ import { ORDER_AUTHORITY } from '../order/order.constants'
 import { Types } from 'mongoose'
 import { Order } from '../order/order.models'
 import { TVendorAssignmentStatus } from './assignProject.constants'
+import { vendorProjectAssignNotify } from './assignProject.utils'
 
 // Create a new Project
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
@@ -51,6 +52,13 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Project assign failed')
   }
+
+  // sent notify to vendor
+  await vendorProjectAssignNotify(
+    new Types.ObjectId(vendorId),
+    order,
+    result.status,
+  )
 
   return result
 }
@@ -149,6 +157,12 @@ const updateStatusIntoDB = async (
       httpStatus.INTERNAL_SERVER_ERROR,
       'Assign vendor record not updated!',
     )
+  }
+
+  // sent notify to vendor
+  const order = await Order.findById(result.vendorOrder)
+  if (order) {
+    await vendorProjectAssignNotify(result.vendor, order, status)
   }
 
   return result

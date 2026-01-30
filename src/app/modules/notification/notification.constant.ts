@@ -21,6 +21,11 @@ export const messages = {
     statusChanged: 'Order Status Updated',
   },
 
+  projectAssign: {
+    newAssign: 'A new project has been assigned to you !',
+    statusChanged: 'Project Status Updated',
+  },
+
   refund: {
     addRequest: 'Refound request added !',
     changedStatus: 'Refound request added !',
