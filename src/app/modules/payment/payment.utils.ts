@@ -2,7 +2,6 @@ import config from '../../config'
 import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { PAYMENT_MODEL_TYPE, TPayment } from './payment.interface'
-import { NotificationService } from '../notification/notification.service'
 import { findAdmin } from '../../utils/findAdmin'
 //@ts-ignore
 import Paystack from 'paystack-api'
@@ -18,6 +17,7 @@ import * as crypto from 'crypto'
 import { PAYMENT_STATUS } from './payment.constant'
 import { sendNotification } from '../../utils/sentNotification'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
+import { DURATION_TYPE } from '../package/package.constant'
 
 export const paystack = Paystack(config.paystack.secret_key)
 
@@ -222,18 +222,18 @@ export const handlePaystackWebhook = async (req: any) => {
         }
 
         // সাবস্ক্রিপশন আপডেট
-        const interval = plan.interval === 'annually' ? 12 : 1
+        const interval = plan.interval === DURATION_TYPE.annually ? 12 : 1
         await Subscription.findByIdAndUpdate(
           subscription._id,
           {
-            paymentStatus: 'paid',
+            paymentStatus: PAYMENT_STATUS.paid,
             expiredAt: new Date(
               new Date(paid_at).setMonth(
                 new Date(paid_at).getMonth() + interval,
               ),
             ),
             isExpired: false,
-            status: 'active',
+            status: SUBSCRIPTION_STATUS.active,
             autoRenew: true,
           },
           { session, new: true },

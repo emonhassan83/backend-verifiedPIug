@@ -5,20 +5,47 @@ import { User } from '../user/user.model'
 import { Project } from '../project/project.models'
 import { AssignProject } from './assignProject.models'
 import QueryBuilder from '../../builder/QueryBuilder'
+import { ORDER_AUTHORITY } from '../order/order.constants'
+import { Types } from 'mongoose'
+import { Order } from '../order/order.models'
+import { TVendorAssignmentStatus } from './assignProject.constants'
 
 // Create a new Project
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
-  const { project: projectId } = payload
+  const {
+    project: projectId,
+    vendor: vendorId,
+    vendorOrder: vendorOrderId,
+  } = payload
 
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
   }
 
+  const vendor = await User.findById(vendorId)
+  if (!vendor || vendor?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found')
+  }
+
+  const order = await Order.findOne({
+    _id: vendorOrderId,
+    authority: ORDER_AUTHORITY.vendor,
+    receiver: vendorId,
+    isDeleted: false,
+  })
+  if (!order) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order not found')
+  }
+
   const project = await Project.findById(projectId)
   if (!project || project?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Project data not found')
   }
+
+  // assigning the assignedBy field
+  payload.assignedBy = new Types.ObjectId(userId)
+  payload.agreedAmount = order.finalAmount
 
   const result = await AssignProject.create(payload)
   if (!result) {
@@ -30,7 +57,19 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
 
 // Get all assign project data
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const AssignProjectModel = new QueryBuilder(AssignProject.find(), query)
+  const AssignProjectModel = new QueryBuilder(
+    AssignProject.find().populate([
+      {
+        path: 'vendor',
+        select: 'name email photoUrl contractNumber ',
+      },
+      {
+        path: 'vendorOrder',
+        select: 'title address locationUrl',
+      },
+    ]),
+    query,
+  )
     .search([''])
     .filter()
     .paginate()
@@ -47,7 +86,15 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 
 // Get Project by ID
 const getAIntoDB = async (id: string) => {
-  const result = await AssignProject.findById(id)
+  const result = await AssignProject.findById(id).populate([
+    {
+      path: 'vendor',
+      select: 'name email photoUrl contractNumber',
+    },
+    {
+      path: 'vendorOrder',
+    },
+  ])
   if (!result) {
     throw new AppError(
       httpStatus.NOT_FOUND,
@@ -78,6 +125,35 @@ const updateIntoDB = async (id: string, payload: Partial<TAssignProject>) => {
   return result
 }
 
+// Update assign project status
+const updateStatusIntoDB = async (
+  id: string,
+  payload: { status: TVendorAssignmentStatus },
+) => {
+  const { status } = payload
+
+  const project = await AssignProject.findById(id)
+  if (!project) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Project assign vendor not found!')
+  }
+
+  const result = await AssignProject.findByIdAndUpdate(
+    id,
+    { status },
+    {
+      new: true,
+    },
+  )
+  if (!result) {
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Assign vendor record not updated!',
+    )
+  }
+
+  return result
+}
+
 // Delete AssignProject
 const deleteAIntoDB = async (id: string) => {
   const project = await AssignProject.findById(id)
@@ -98,5 +174,6 @@ export const AssignProjectService = {
   getAllIntoDB,
   getAIntoDB,
   updateIntoDB,
+  updateStatusIntoDB,
   deleteAIntoDB,
 }

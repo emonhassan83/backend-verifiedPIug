@@ -83,7 +83,7 @@ const moduleRoutes = [
     route: ProjectRoutes,
   },
   {
-    path: '/assign-projects',
+    path: '/assign-vendors',
     route: AssignProjectRoutes,
   },
   {

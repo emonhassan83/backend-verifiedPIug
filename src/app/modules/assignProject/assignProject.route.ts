@@ -14,6 +14,13 @@ router.post(
   AssignProjectController.insertIntoDB,
 )
 
+router.patch(
+  '/status/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  zodValidationRequest(AssignProjectValidation.changeStatusValidationSchema),
+  AssignProjectController.updateIntoDB,
+)
+
 router.put(
   '/:id',
   auth(USER_ROLE.planer),
@@ -23,7 +30,7 @@ router.put(
 
 router.get(
   '/project/:projectId',
-  auth(USER_ROLE.planer),
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
   AssignProjectController.getAllIntoDB,
 )
 

@@ -49,6 +49,16 @@ const updateIntoDB = catchAsync(async (req: Request, res: Response) => {
     data: result,
   })
 })
+const updateStatusIntoDB = catchAsync(async (req: Request, res: Response) => {
+  const result = await AssignProjectService.updateStatusIntoDB(req.params.id, req.body)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Project vendor updated successfully',
+    data: result,
+  })
+})
 
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await AssignProjectService.deleteAIntoDB(req.params.id)
@@ -66,5 +76,6 @@ export const AssignProjectController = {
   getAllIntoDB,
   getAIntoDB,
   updateIntoDB,
+  updateStatusIntoDB,
   deleteAIntoDB
 }
