@@ -37,11 +37,26 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     .sort()
     .fields()
 
-  const data = await TaskModel.modelQuery
+  const taskList = await TaskModel.modelQuery
+
+  // Calculate statistics
+  const totalTasks = taskList.length
+  const completedTask = taskList.filter((task) => task.isCompleted).length
+  const incompleteTask = totalTasks - completedTask
+  const progress =
+    totalTasks > 0 ? Math.round((completedTask / totalTasks) * 100) : 0
+
+  // Get meta data
   const meta = await TaskModel.countTotal()
+
   return {
-    data,
     meta,
+    data: {
+      incompleteTask,
+      completedTask,
+      progress,
+      taskList,
+    },
   }
 }
 
@@ -77,29 +92,29 @@ const updateIntoDB = async (id: string, payload: Partial<TTask>) => {
 
 // Toggle task status
 const changedStatusIntoDB = async (id: string) => {
-  const task = await Task.findById(id);
+  const task = await Task.findById(id)
 
   if (!task) {
-    throw new AppError(httpStatus.NOT_FOUND, "Task not found!");
+    throw new AppError(httpStatus.NOT_FOUND, 'Task not found!')
   }
 
-  const updatedStatus = !task.isCompleted;
+  const updatedStatus = !task.isCompleted
 
   const result = await Task.findByIdAndUpdate(
     id,
     { isCompleted: updatedStatus },
-    { new: true }
-  );
+    { new: true },
+  )
 
   if (!result) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      "Task record not updated!"
-    );
+      'Task record not updated!',
+    )
   }
 
-  return result;
-};
+  return result
+}
 
 // Delete Task
 const deleteAIntoDB = async (id: string) => {

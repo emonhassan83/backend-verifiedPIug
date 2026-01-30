@@ -11,14 +11,18 @@ const upload = multer({ storage })
 
 router.post(
   '/',
-  auth(USER_ROLE.admin),
+  auth(USER_ROLE.planer),
   upload.fields([{ name: 'files', maxCount: 10 }]),
   parseData(),
   FileController.insertIntoDB,
 )
 
-router.get('/project/:projectId', FileController.getAllIntoDB)
+router.get(
+  '/project/:projectId',
+  auth(USER_ROLE.planer),
+  FileController.getAllIntoDB,
+)
 
-router.delete('/:id', auth(USER_ROLE.admin), FileController.deleteAIntoDB)
+router.delete('/:id', auth(USER_ROLE.planer), FileController.deleteAIntoDB)
 
 export const FileRoutes = router
