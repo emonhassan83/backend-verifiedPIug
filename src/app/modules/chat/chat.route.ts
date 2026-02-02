@@ -9,39 +9,33 @@ const router = Router()
 
 router.post(
   '/',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   validateRequest(ChatValidation.createValidation),
   chatController.createChat,
 )
 
 router.put(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   validateRequest(ChatValidation.updateValidation),
   chatController.updateChat,
 )
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   chatController.deleteChat,
 )
 
 router.get(
-  '/project/:userId',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  chatController.getChatByUserId,
-)
-
-router.get(
   '/my-chat-list',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   chatController.getMyChatList,
 )
 
 router.get(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   chatController.getChatById,
 )
 

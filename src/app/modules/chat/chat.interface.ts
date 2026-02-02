@@ -4,11 +4,11 @@ import { TChatType } from './chat.constants'
 export interface TChat {
   _id?: Types.ObjectId
   type: TChatType
+  project?: Types.ObjectId | null
   name?: string
   image?: string
-  project?: Types.ObjectId
-  participants: Types.ObjectId[]
   status: string
+  isDeleted: boolean
 }
 
 export type TChatModel = Model<TChat, Record<string, unknown>>

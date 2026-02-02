@@ -4,12 +4,6 @@ import { CHAT_STATUS, CHAT_TYPE } from './chat.constants'
 
 const chatSchema = new Schema<TChat>(
   {
-    participants: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
     project: {
       type: Schema.Types.ObjectId,
       ref: 'Project',
@@ -32,6 +26,10 @@ const chatSchema = new Schema<TChat>(
       type: String,
       enum: Object.values(CHAT_STATUS),
       default: CHAT_STATUS.accepted,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true },

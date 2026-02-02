@@ -26,6 +26,7 @@ import { WithdrawRoutes } from '../modules/withdraw/withdraw.route'
 import { PaymentRoutes } from '../modules/payment/payment.route'
 import { uploadRouter } from '../modules/uploads/route'
 import { RefundRoutes } from '../modules/refund/refund.route'
+import { ParticipantRoutes } from '../modules/participant/participant.route'
 
 const router = Router()
 
@@ -97,6 +98,10 @@ const moduleRoutes = [
   {
     path: '/chats',
     route: ChatRoutes,
+  },
+  {
+    path: '/participants',
+    route: ParticipantRoutes,
   },
   {
     path: '/messages',
