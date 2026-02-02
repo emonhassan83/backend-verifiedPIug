@@ -40,16 +40,16 @@ const getMyChatList = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const { page = 1, limit = 20, sort = '-createdAt', fields } = query
+  const { page = 1, limit = 20 } = query
 
   const baseQuery = Chat.find({ isDeleted: false }).populate({
-    path: 'owner',
-    select: 'username photoUrl email',
+    path: 'participants.user',
+    select: 'username photoUrl email role',
   })
 
   const queryBuilder = new QueryBuilder(baseQuery, query)
 
-  // Only rooms where user is participant
+  // শুধু যেসব চ্যাটে ইউজার আছে
   queryBuilder.modelQuery = queryBuilder.modelQuery.find({
     'participants.user': new Types.ObjectId(userId),
     'participants.isDeleted': false,
@@ -60,24 +60,24 @@ const getMyChatList = async (
   queryBuilder.paginate()
   queryBuilder.fields()
 
-  const rooms = await queryBuilder.modelQuery
+  const chats = await queryBuilder.modelQuery
 
-  // Enrich with last message & unread count
+  // last message + unread count যোগ করা
   const enriched = await Promise.all(
-    rooms.map(async (room) => {
-      const lastMessage = await Message.findOne({ room: room._id })
+    chats.map(async (chat) => {
+      const lastMessage = await Message.findOne({ chat: chat._id })
         .sort({ createdAt: -1 })
         .populate('sender', 'username photoUrl')
 
       const unreadCount = await Message.countDocuments({
-        room: room._id,
+        chat: chat._id,
         sender: { $ne: new Types.ObjectId(userId) },
         seen: false,
       })
 
       return {
-        ...room.toObject(),
-        lastMessage: lastMessage || null,
+        ...chat.toObject(),
+        lastMessage,
         unreadCount,
       }
     }),

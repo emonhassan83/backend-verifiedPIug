@@ -94,29 +94,10 @@ const updateMessages = catchAsync(async (req: Request, res: Response) => {
 
 //seen messages
 const seenMessage = catchAsync(async (req: Request, res: Response) => {
-  const chatList: TChat | null = await Chat.findById(req.params.chatId)
-  if (!chatList) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'chat id is not valid')
-  }
-
   const result = await messagesService.seenMessage(
     req.user._id,
     req.params.chatId,
   )
-
-  const user1 = chatList.participants[0]
-  const user2 = chatList.participants[1]
-  // //----------------------ChatList------------------------//
-  const ChatListUser1 = await chatService.getMyChatList(user1.toString(), {})
-
-  const ChatListUser2 = await chatService.getMyChatList(user2.toString(), {})
-
-  const user1Chat = 'chat-list::' + user1
-
-  const user2Chat = 'chat-list::' + user2
-
-  io.emit(user1Chat, ChatListUser1)
-  io.emit(user2Chat, ChatListUser2)
 
   sendResponse(res, {
     statusCode: 200,
@@ -138,16 +119,20 @@ const deleteMessages = catchAsync(async (req: Request, res: Response) => {
 })
 
 // delete messages by chat ID
-const deleteMessagesByChatId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.deleteMessagesByChatId(req.params.chatId)
+const deleteMessagesByChatId = catchAsync(
+  async (req: Request, res: Response) => {
+    const result = await messagesService.deleteMessagesByChatId(
+      req.params.chatId,
+    )
 
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Messages deleted successfully',
-    data: result,
-  })
-})
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: 'Messages deleted successfully',
+      data: result,
+    })
+  },
+)
 
 export const messagesController = {
   createMessages,
@@ -157,5 +142,5 @@ export const messagesController = {
   updateMessages,
   deleteMessages,
   seenMessage,
-  deleteMessagesByChatId
+  deleteMessagesByChatId,
 }
