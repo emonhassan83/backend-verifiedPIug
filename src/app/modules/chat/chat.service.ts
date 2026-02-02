@@ -1,185 +1,178 @@
 import httpStatus from 'http-status'
-import { deleteFromS3 } from '../../utils/s3'
 import { TChat } from './chat.interface'
 import AppError from '../../errors/AppError'
 import { Chat } from './chat.models'
 import { User } from '../user/user.model'
 import { Message } from '../messages/messages.models'
+import { Participant } from '../participant/participant.models'
+import { Types } from 'mongoose'
+import QueryBuilder from '../../builder/QueryBuilder'
+import { TChatStatus } from './chat.constants'
+import { PARTICIPANT_ROLE } from '../participant/participant.constants'
 
 // Create chat
-const createChat = async (payload: TChat) => {
-  const user1 = await User.findById(payload?.participants[0])
-
-  if (!user1) {
-    throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid user')
+const createChat = async (payload: TChat, userId: string) => {
+  const { participants, ...restPayload } = payload
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
 
-  const user2 = await User.findById(payload?.participants[1])
-
-  if (!user2) {
-    throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid user')
-  }
-
-  const alreadyExists = await Chat.findOne({
-    participants: { $all: payload.participants },
-  }).populate(['participants'])
-
-  if (alreadyExists) {
-    return alreadyExists
-  }
-
-  const result = Chat.create(payload)
+  const result = await Chat.create(restPayload)
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Chat creation failed')
   }
+
+  if (participants && participants.length > 0) {
+    const participantDocs = participants.map((participant) => ({
+      chat: result._id,
+      user: participant.user,
+      role: PARTICIPANT_ROLE.user,
+    }))
+    await Participant.insertMany(participantDocs)
+  }
+
   return result
 }
 
 // Get my chat list
-const getMyChatList = async (userId: string, query: Record<string, unknown>) => {
-  const searchTerm = query.searchTerm as string | undefined
+const getMyChatList = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  const { page = 1, limit = 20, sort = '-createdAt', fields } = query
 
-  const chats = await Chat.find({
-    participants: userId,
-  }).populate({
-    path: 'participants',
-    select: 'name email photoUrl _id contactNumber',
-    match: { _id: { $ne: userId } },
+  const baseQuery = Chat.find({ isDeleted: false }).populate({
+    path: 'owner',
+    select: 'username photoUrl email',
   })
 
-  if (!chats) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Chat list not found')
-  }
+  const queryBuilder = new QueryBuilder(baseQuery, query)
 
-  const data = []
-
-  for (const chatItem of chats) {
-    const participant = chatItem?.participants?.[0]
-    if (!participant || typeof participant !== 'object' || !('name' in participant)) continue
-
-    // Apply name-based search
-    if (searchTerm) {
-      const name = ((participant as any)?.name || '').toLowerCase()
-      if (!name.includes(searchTerm.toLowerCase())) continue
-    }
-
-    const chatId = chatItem?._id
-
-    const message = await Message.findOne({ chat: chatId }).sort({
-      updatedAt: -1,
-    })
-
-    const unreadMessageCount = message
-      ? await Message.countDocuments({
-          chat: chatId,
-          seen: false,
-          sender: { $ne: userId },
-        })
-      : 0
-
-    data.push({ chat: chatItem, message: message || null, unreadMessageCount })
-  }
-
-  // Sort by latest message
-  data.sort((a, b) => {
-    const dateA = a.message && a.message.createdAt instanceof Date ? a.message.createdAt.getTime() : (a.message && typeof a.message.createdAt === 'number' ? a.message.createdAt : 0)
-    const dateB = b.message && b.message.createdAt instanceof Date ? b.message.createdAt.getTime() : (b.message && typeof b.message.createdAt === 'number' ? b.message.createdAt : 0)
-    return dateB - dateA
+  // Only rooms where user is participant
+  queryBuilder.modelQuery = queryBuilder.modelQuery.find({
+    'participants.user': new Types.ObjectId(userId),
+    'participants.isDeleted': false,
   })
 
-  return data
+  queryBuilder.filter()
+  queryBuilder.sort()
+  queryBuilder.paginate()
+  queryBuilder.fields()
+
+  const rooms = await queryBuilder.modelQuery
+
+  // Enrich with last message & unread count
+  const enriched = await Promise.all(
+    rooms.map(async (room) => {
+      const lastMessage = await Message.findOne({ room: room._id })
+        .sort({ createdAt: -1 })
+        .populate('sender', 'username photoUrl')
+
+      const unreadCount = await Message.countDocuments({
+        room: room._id,
+        sender: { $ne: new Types.ObjectId(userId) },
+        seen: false,
+      })
+
+      return {
+        ...room.toObject(),
+        lastMessage: lastMessage || null,
+        unreadCount,
+      }
+    }),
+  )
+
+  const meta = await queryBuilder.countTotal()
+
+  return { meta, data: enriched }
 }
 
 // Get chat by ID
-const getChatById = async (id: string) => {
-  const result = await Chat.findById(id).populate({
-    path: 'participants',
-    select: 'name email photoUrl _id contactNumber',
-  })
-
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Chat not found')
+const getChatById = async (chatId: string, requestingUserId: string) => {
+  const chat = await Chat.findById(chatId).populate(
+    'owner',
+    'username photoUrl email',
+  )
+  if (!chat || chat?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
   }
-  return result
+
+  // Access check
+  const isParticipant = await Participant.exists({
+    chat: chatId,
+    user: requestingUserId,
+    isDeleted: false,
+  })
+  if (!isParticipant) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You do not have access to this room',
+    )
+  }
+
+  return chat
 }
 
-// Get chat by user ID
-const getChatByUserId = async (currentUser: string, userId: string) => {
-  const chats = await Chat.find({
-    participants: { $all: [currentUser, userId] },
-  }).populate({
-    path: 'participants',
-    select: 'name email photoUrl _id contactNumber',
-    match: { _id: { $ne: currentUser } },
-  });
-
-  if (!chats) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Chat list not found');
-  }
-
-  const data = [];
-
-  for (const chatItem of chats) {
-    const participant = chatItem?.participants?.[0];
-    if (!participant || typeof participant !== 'object' || !('name' in participant)) continue;
-
-    const chatId = chatItem?._id;
-
-    const message = await Message.findOne({ chat: chatId }).sort({
-      updatedAt: -1,
-    });
-
-    const unreadMessageCount = message
-      ? await Message.countDocuments({
-          chat: chatId,
-          seen: false,
-          sender: { $ne: currentUser },
-        })
-      : 0;
-
-    data.push({ chat: chatItem, message: message || null, unreadMessageCount });
-  }
-
-  data.sort((a, b) => {
-    const dateA =
-      a.message && a.message.createdAt
-        ? a.message.createdAt instanceof Date
-          ? a.message.createdAt.getTime()
-          : typeof a.message.createdAt === 'number'
-          ? a.message.createdAt
-          : 0
-        : 0;
-    const dateB =
-      b.message && b.message.createdAt
-        ? b.message.createdAt instanceof Date
-          ? b.message.createdAt.getTime()
-          : typeof b.message.createdAt === 'number'
-          ? b.message.createdAt
-          : 0
-        : 0;
-    return dateB - dateA;
-  });
-
-  return data;
-};
-
-
 // Update chat list
-const updateChatList = async (id: string, payload: Partial<TChat>) => {
-  const result = await Chat.findByIdAndUpdate(id, payload, { new: true })
-  if (!result) {
+const updateChatList = async (
+  id: string,
+  payload: { status: TChatStatus },
+  userId: string,
+) => {
+  const { status } = payload
+
+  const chat = await Chat.findById(id)
+  if (!chat) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Chat not found')
   }
+
+  // Ensure user in of the chat
+  const isParticipant = await Participant.exists({
+    chat: id,
+    user: userId,
+    isDeleted: false,
+  })
+  if (!isParticipant) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You do not have access to this chat',
+    )
+  }
+
+  const result = await Chat.findByIdAndUpdate(
+    id,
+    { status },
+    { new: true, runValidators: true },
+  )
   return result
 }
 
 // Delete chat list
-const deleteChatList = async (id: string) => {
-  await deleteFromS3(`images/messages/${id}`)
-  const result = await Chat.findByIdAndDelete(id)
-  if (!result) {
+const deleteChatList = async (id: string, userId: string) => {
+  const chat = await Chat.findById(id)
+  if (!chat) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Chat not found')
   }
+
+  // Ensure user in of the chat
+  const isParticipant = await Participant.exists({
+    chat: id,
+    user: userId,
+    isDeleted: false,
+  })
+  if (!isParticipant) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You do not have access to this chat',
+    )
+  }
+
+  const result = await Chat.findByIdAndUpdate(
+    id,
+    { isDeleted: true },
+    { new: true, runValidators: true },
+  )
   return result
 }
 
@@ -187,7 +180,6 @@ export const chatService = {
   createChat,
   getMyChatList,
   getChatById,
-  getChatByUserId,
   updateChatList,
   deleteChatList,
 }

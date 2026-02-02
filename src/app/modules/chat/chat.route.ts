@@ -28,7 +28,7 @@ router.delete(
 )
 
 router.get(
-  '/my-chat-list',
+  '/my-chats',
   auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   chatController.getMyChatList,
 )

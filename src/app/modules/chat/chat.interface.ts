@@ -1,5 +1,9 @@
 import { Model, Types } from 'mongoose'
-import { TChatType } from './chat.constants'
+import { TChatStatus, TChatType } from './chat.constants'
+
+interface TParticipant {
+  user: Types.ObjectId
+}
 
 export interface TChat {
   _id?: Types.ObjectId
@@ -7,7 +11,8 @@ export interface TChat {
   project?: Types.ObjectId | null
   name?: string
   image?: string
-  status: string
+  participants?: TParticipant[]
+  status: TChatStatus
   isDeleted: boolean
 }
 

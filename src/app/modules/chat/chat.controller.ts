@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { chatService } from './chat.service'
 
 const createChat = catchAsync(async (req: Request, res: Response) => {
-  const chat = await chatService.createChat(req.body)
+  const chat = await chatService.createChat(req.body, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -26,18 +26,7 @@ const getMyChatList = catchAsync(async (req: Request, res: Response) => {
 })
 
 const getChatById = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatById(req.params.id)
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Chat retrieved successfully',
-    data: result,
-  })
-})
-
-const getChatByUserId = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.getChatByUserId(req?.user._id, req.params.userId)
+  const result = await chatService.getChatById(req.params.id, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -48,7 +37,7 @@ const getChatByUserId = catchAsync(async (req: Request, res: Response) => {
 })
 
 const updateChat = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.updateChatList(req.params.id, req.body)
+  const result = await chatService.updateChatList(req.params.id, req.body, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -59,7 +48,7 @@ const updateChat = catchAsync(async (req: Request, res: Response) => {
 })
 
 const deleteChat = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.deleteChatList(req.params.id)
+  const result = await chatService.deleteChatList(req.params.id, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -72,7 +61,6 @@ const deleteChat = catchAsync(async (req: Request, res: Response) => {
 export const chatController = {
   createChat,
   getMyChatList,
-  getChatByUserId,
   getChatById,
   updateChat,
   deleteChat,

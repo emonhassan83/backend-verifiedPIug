@@ -5,7 +5,9 @@ export const CHAT_TYPE = {
 
 export const CHAT_STATUS = {
   accepted: 'accepted',
-  blocked: 'blocked'
+  paused: 'paused',
+  blocked: 'blocked',
+  archived: 'archived'
 } as const
 
 export type TChatType = keyof typeof CHAT_TYPE
