@@ -4,6 +4,35 @@ import { sendNotification } from '../../utils/sentNotification'
 import { SERVICE_STATUS } from './service.constants'
 import { TUser } from '../user/user.interface'
 import { TService } from './service.interface'
+import { Favorite } from '../favorite/favorite.model'
+
+export const attachFavoriteFlag = async (
+  services: any[],
+  userId: string,
+) => {
+  if (!userId) {
+    return services.map(service => ({
+      ...service.toObject(),
+      isFavorite: false,
+    }))
+  }
+
+  // 1️⃣ Get all favorite service IDs for this user
+  const favorites = await Favorite.find({ user: userId })
+    .select('service')
+    .lean()
+
+  const favoriteServiceIds = new Set(
+    favorites.map(fav => fav.service.toString()),
+  )
+
+  // 2️⃣ Attach isFavorite flag
+  return services.map(service => ({
+    ...service.toObject(),
+    isFavorite: favoriteServiceIds.has(service._id.toString()),
+  }))
+}
+
 
 export const sendServiceStatusNotifyToAuthor = async (
   status: keyof typeof SERVICE_STATUS,

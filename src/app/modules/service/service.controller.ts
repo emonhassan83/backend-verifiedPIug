@@ -21,7 +21,7 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 // Get all Service
 const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.getAllIntoDB(req.query)
+  const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -48,7 +48,7 @@ const getAllRecommendServices = catchAsync(
 
 const getActiveServices = catchAsync(async (req: Request, res: Response) => {
   req.query['status'] = SERVICE_STATUS.active
-  const result = await ServiceService.getAllIntoDB(req.query)
+  const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -62,7 +62,7 @@ const getActiveServices = catchAsync(async (req: Request, res: Response) => {
 const getMyServices = catchAsync(async (req: Request, res: Response) => {
   req.query['author'] = req.user._id
   req.query['status'] = SERVICE_STATUS.active
-  const result = await ServiceService.getAllIntoDB(req.query)
+  const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -76,7 +76,7 @@ const getMyServices = catchAsync(async (req: Request, res: Response) => {
 const getUserServices = catchAsync(async (req: Request, res: Response) => {
   req.query['author'] = req.params.userId
   req.query['status'] = SERVICE_STATUS.active
-  const result = await ServiceService.getAllIntoDB(req.query)
+  const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -89,7 +89,7 @@ const getUserServices = catchAsync(async (req: Request, res: Response) => {
 
 // Get Service by ID
 const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.getAIntoDB(req.params.id)
+  const result = await ServiceService.getAIntoDB(req.params.id, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,

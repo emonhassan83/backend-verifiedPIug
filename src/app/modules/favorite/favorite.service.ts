@@ -4,6 +4,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Favorite } from './favorite.model'
 import { User } from '../user/user.model'
 import { Service } from '../service/service.models'
+import { SERVICE_STATUS } from '../service/service.constants'
 
 const insertIntoDB = async (userId: string, serviceId: string) => {
   // 1️⃣ Validate User
@@ -13,8 +14,12 @@ const insertIntoDB = async (userId: string, serviceId: string) => {
   }
 
   // 2️⃣ Validate Service
-  const service = await Service.findById(serviceId)
-  if (!service || service.isDeleted) {
+  const service = await Service.findOne({
+    _id: serviceId,
+    status: SERVICE_STATUS.active,
+    isDeleted: false,
+  })
+  if (!service) {
     throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
@@ -51,7 +56,13 @@ const insertIntoDB = async (userId: string, serviceId: string) => {
 }
 
 const getAllIntoDB = async (query: Record<string, unknown>) => {
-  const favoriteQuery = new QueryBuilder(Favorite.find(), query)
+  const favoriteQuery = new QueryBuilder(
+    Favorite.find().populate([
+      { path: 'user', select: 'name photoUrl ratingCount avgRating' },
+      { path: 'service', select: 'title subtitle images price priceType' },
+    ]),
+    query,
+  )
     .search([''])
     .filter()
     .sort()
@@ -68,7 +79,10 @@ const getAllIntoDB = async (query: Record<string, unknown>) => {
 }
 
 const getAIntoDB = async (id: string) => {
-  const result = await Favorite.findById(id).populate('service')
+  const result = await Favorite.findById(id).populate([
+    { path: 'user', select: 'name photoUrl ratingCount avgRating' },
+    { path: 'service' },
+  ])
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Favorites not found')
   }
@@ -92,7 +106,7 @@ const deleteAIntoDB = async (favoriteId: string, userId: string) => {
   }
 
   // Delete favorite
-  const result = await Favorite.findByIdAndDelete(favoriteId);
+  const result = await Favorite.findByIdAndDelete(favoriteId)
   if (!result) {
     throw new AppError(httpStatus.CONFLICT, 'Favorite not removed!')
   }

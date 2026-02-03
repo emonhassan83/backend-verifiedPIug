@@ -7,7 +7,11 @@ import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { Category } from '../categories/categories.models'
 import { SERVICE_STATUS } from './service.constants'
-import { sendServiceStatusNotifyToAuthor } from './service.utils'
+import {
+  attachFavoriteFlag,
+  sendServiceStatusNotifyToAuthor,
+} from './service.utils'
+import { Favorite } from '../favorite/favorite.model'
 
 const generateGoogleMapUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -72,7 +76,7 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
 }
 
 // Get all Service
-const getAllIntoDB = async (query: Record<string, any>) => {
+const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   const ServiceModel = new QueryBuilder(
     Service.find({ isDeleted: false }),
     query,
@@ -83,8 +87,11 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     .sort()
     .fields()
 
-  const data = await ServiceModel.modelQuery
+  const services = await ServiceModel.modelQuery
   const meta = await ServiceModel.countTotal()
+
+  const data = await attachFavoriteFlag(services, userId)
+
   return {
     data,
     meta,
@@ -130,8 +137,10 @@ const getAllRecommendServices = async (
     .paginate()
     .fields()
 
-  const data = await serviceQuery.modelQuery
+  const services = await serviceQuery.modelQuery
   const meta = await serviceQuery.countTotal()
+
+  const data = await attachFavoriteFlag(services, userId)
 
   return {
     meta,
@@ -140,7 +149,7 @@ const getAllRecommendServices = async (
 }
 
 // Get Service by ID
-const getAIntoDB = async (id: string) => {
+const getAIntoDB = async (id: string, userId: string) => {
   const result = await Service.findById(id).populate([
     {
       path: 'author',
@@ -152,7 +161,15 @@ const getAIntoDB = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Service not found')
   }
 
-  return result
+  const favorite = await Favorite.findOne({
+    user: userId,
+    service: id,
+  })
+
+  return {
+    ...result.toObject(),
+    isFavorite: !!favorite,
+  }
 }
 
 // Update Service
@@ -161,64 +178,67 @@ const updateAIntoDB = async (
   payload: Partial<TService>,
   files: any,
 ) => {
-  const service = await Service.findById(id);
+  const service = await Service.findById(id)
   if (!service || service?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
   /* -------------------- LOCATION UPDATE -------------------- */
-  const latitude = (payload as any)?.latitude;
-  const longitude = (payload as any)?.longitude;
+  const latitude = (payload as any)?.latitude
+  const longitude = (payload as any)?.longitude
 
   if (latitude && longitude) {
-    const locationUrl = generateGoogleMapUrl(latitude, longitude);
+    const locationUrl = generateGoogleMapUrl(latitude, longitude)
 
-    payload.locationUrl = locationUrl;
+    payload.locationUrl = locationUrl
     payload.location = {
       type: 'Point',
       coordinates: [longitude, latitude], // MongoDB: [lng, lat]
-    };
+    }
   }
 
   // -------------------- Images Handling (Replace old images) --------------------
-  let finalImages: string[] = [];
+  let finalImages: string[] = []
 
-  const uploadedFiles = files?.files;
+  const uploadedFiles = files?.files
 
-  if (uploadedFiles && Array.isArray(uploadedFiles) && uploadedFiles.length > 0) {
-    
-    const newImageUrls: string[] = [];
+  if (
+    uploadedFiles &&
+    Array.isArray(uploadedFiles) &&
+    uploadedFiles.length > 0
+  ) {
+    const newImageUrls: string[] = []
     for (const file of uploadedFiles) {
       const uploadedUrl = (await uploadToS3({
         file,
         fileName: `images/services/${Date.now()}-${Math.floor(100000 + Math.random() * 900000)}`,
-      })) as string;
+      })) as string
 
-      newImageUrls.push(uploadedUrl);
+      newImageUrls.push(uploadedUrl)
     }
 
-    finalImages = newImageUrls; 
+    finalImages = newImageUrls
   } else {
-    finalImages = service.images || [];
+    finalImages = service.images || []
   }
 
-  payload.images = finalImages;
+  payload.images = finalImages
 
   // -------------------- Final Update --------------------
   const result = await Service.findByIdAndUpdate(id, payload, {
     new: true,
     runValidators: true,
-  });
+  })
 
   if (!result) {
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Service record not updated!'
-    );
+      'Service record not updated!',
+    )
   }
 
-  return result;
-};
+  return result
+}
 
 const changeStatusFromDB = async (id: string, payload: any) => {
   const { status } = payload
