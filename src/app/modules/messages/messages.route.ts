@@ -13,7 +13,7 @@ const upload = multer({ storage })
 
 router.post(
   '/send-messages',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   upload.single('image'),
   parseData(),
   validateRequest(messagesValidation.sendMessageValidation),
@@ -22,43 +22,39 @@ router.post(
 
 router.patch(
   '/seen/:chatId',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   messagesController.seenMessage,
 )
 
-router.patch(
-  '/update/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  upload.single('image'),
-  parseData(),
+router.put(
+  '/:id',
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   validateRequest(messagesValidation.updateMessageValidation),
   messagesController.updateMessages,
 )
 
-router.get('/my-messages/:chatId', messagesController.getMessagesByChatId)
+router.get(
+  '/chat/:chatId',
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
+  messagesController.getMessagesByChatId,
+)
 
 router.delete(
   '/chat/:chatId',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   messagesController.deleteMessagesByChatId,
 )
 
 router.delete(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   messagesController.deleteMessages,
 )
 
 router.get(
   '/:id',
-  auth(USER_ROLE.admin, USER_ROLE.user),
+  auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
   messagesController.getMessagesById,
-)
-
-router.get(
-  '/',
-  auth(USER_ROLE.admin, USER_ROLE.user),
-  messagesController.getAllMessages,
 )
 
 export const MessagesRoutes = router

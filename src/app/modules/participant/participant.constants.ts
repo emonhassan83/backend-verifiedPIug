@@ -7,6 +7,7 @@ export const PARTICIPANT_ROLE = {
 export const PARTICIPANT_STATUS = {
   active: 'active',
   blocked: 'blocked',
+  locked: 'locked',
 } as const
 
 export type TParticipantRole = keyof typeof PARTICIPANT_ROLE

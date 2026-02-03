@@ -4,17 +4,15 @@ import { TMessages, TMessagesModel } from './messages.interface'
 const messageSchema = new Schema<TMessages>(
   {
     text: { type: String, default: null },
-    imageUrl: [
-      {
-        key: { type: String, default: null },
-        url: { type: String, default: null },
-      },
-    ],
+    imageUrl: {
+      type: [String],
+      default: [],
+    },
     seen: { type: Boolean, default: false },
     sender: {
       type: Schema.Types.ObjectId,
-      required: true,
       ref: 'User',
+      required: true,
     },
     receiver: {
       type: Schema.Types.ObjectId,
@@ -27,8 +25,8 @@ const messageSchema = new Schema<TMessages>(
       ref: 'Chat',
     },
   },
-  { timestamps: true }
-);
+  { timestamps: true },
+)
 
 export const Message = model<TMessages, TMessagesModel>(
   'Messages',

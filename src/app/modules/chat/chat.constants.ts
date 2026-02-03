@@ -4,8 +4,8 @@ export const CHAT_TYPE = {
 } as const
 
 export const CHAT_STATUS = {
-  accepted: 'accepted',
-  paused: 'paused',
+  active: 'active',
+  locked: 'locked',
   blocked: 'blocked',
   archived: 'archived'
 } as const

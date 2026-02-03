@@ -15,8 +15,8 @@ const addAParticipant = catchAsync(async (req: Request, res: Response) => {
 })
 
 // Get all Participants
-const getRoomParticipants = catchAsync(async (req: Request, res: Response) => {
-  const result = await ParticipantsService.getRoomParticipants(req.query, req.params.roomId)
+const getChatParticipants = catchAsync(async (req: Request, res: Response) => {
+  const result = await ParticipantsService.getChatParticipants(req.query, req.params.chatId)
 
   sendResponse(res, {
     statusCode: 200,
@@ -57,7 +57,7 @@ const removeParticipant = catchAsync(async (req: Request, res: Response) => {
 
 export const ParticipantController = {
   addAParticipant,
-  getRoomParticipants,
+  getChatParticipants,
   changeParticipantStatus,
   removeParticipant,
 }

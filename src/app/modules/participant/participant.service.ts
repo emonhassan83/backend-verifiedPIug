@@ -50,7 +50,7 @@ const addParticipant = async (payload: TParticipant, requesterId: string) => {
 }
 
 // Get all messages
-const getRoomParticipants = async (
+const getChatParticipants = async (
   query: Record<string, any>,
   chatId: string,
 ) => {
@@ -160,7 +160,7 @@ const removeParticipant = async (
 
 export const ParticipantsService = {
   addParticipant,
-  getRoomParticipants,
+  getChatParticipants,
   updateParticipant,
   removeParticipant,
 }

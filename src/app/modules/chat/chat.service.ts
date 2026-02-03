@@ -9,6 +9,7 @@ import { Types } from 'mongoose'
 import QueryBuilder from '../../builder/QueryBuilder'
 import { CHAT_TYPE, TChatStatus } from './chat.constants'
 import { PARTICIPANT_ROLE } from '../participant/participant.constants'
+import { uploadToS3 } from '../../utils/s3'
 
 // Create chat
 const createChat = async (payload: TChat, userId: string) => {
@@ -145,6 +146,49 @@ const getChatById = async (chatId: string, requestingUserId: string) => {
 // Update chat list
 const updateChatList = async (
   id: string,
+  payload: Partial<TChat>,
+  file: Express.Multer.File | undefined,
+  userId: string,
+) => {
+  const chat = await Chat.findById(id)
+  if (!chat) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Chat not found')
+  }
+
+  // Ensure user in of the chat
+  const isParticipant = await Participant.exists({
+    chat: id,
+    user: userId,
+    isDeleted: false,
+  })
+  if (!isParticipant) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You do not have access to this chat',
+    )
+  }
+
+  // upload image if provided
+  if (file) {
+    const imageUrl = await uploadToS3({
+      file,
+      fileName: `images/chat/image/${Math.floor(100000 + Math.random() * 900000)}`,
+    })
+    if (imageUrl) {
+      payload.image = imageUrl
+    }
+  }
+
+  const result = await Chat.findByIdAndUpdate(id, payload, {
+    new: true,
+    runValidators: true,
+  })
+  return result
+}
+
+// Update chat list
+const updateChatStatus = async (
+  id: string,
   payload: { status: TChatStatus },
   userId: string,
 ) => {
@@ -209,5 +253,6 @@ export const chatService = {
   getMyChatList,
   getChatById,
   updateChatList,
+  updateChatStatus,
   deleteChatList,
 }

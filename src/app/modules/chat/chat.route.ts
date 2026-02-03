@@ -4,8 +4,12 @@ import validateRequest from '../../middleware/validateRequest'
 import { ChatValidation } from './chat.validation'
 import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
+import parseData from '../../middleware/parseData'
+import multer, { memoryStorage } from 'multer'
 
 const router = Router()
+const storage = memoryStorage()
+const upload = multer({ storage })
 
 router.post(
   '/',
@@ -14,9 +18,18 @@ router.post(
   chatController.createChat,
 )
 
+router.patch(
+  '/status/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  validateRequest(ChatValidation.changeStatusValidation),
+  chatController.updateChatStatus,
+)
+
 router.put(
   '/:id',
   auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  upload.single('image'),
+  parseData(),
   validateRequest(ChatValidation.updateValidation),
   chatController.updateChat,
 )

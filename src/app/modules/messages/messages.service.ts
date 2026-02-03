@@ -54,34 +54,6 @@ const createMessages = async (payload: TMessages) => {
   return result
 }
 
-// Get all messages
-const getAllMessages = async (query: Record<string, any>) => {
-  const MessageModel = new QueryBuilder(
-    Message.find().populate([
-      {
-        path: 'sender',
-        select: 'name email photoUrl _id contactNumber',
-      },
-      {
-        path: 'receiver',
-        select: 'name email photoUrl _id contactNumber',
-      },
-    ]),
-    query,
-  )
-    .filter()
-    // .paginate()
-    .sort()
-    .fields()
-
-  const data = await MessageModel.modelQuery
-  const meta = await MessageModel.countTotal()
-  return {
-    data,
-    meta,
-  }
-}
-
 // Update messages
 const updateMessages = async (id: string, payload: Partial<TMessages>) => {
   const result = await Message.findByIdAndUpdate(id, payload, { new: true })
@@ -206,7 +178,6 @@ export const messagesService = {
   getMessagesByChatId,
   getMessagesById,
   updateMessages,
-  getAllMessages,
   deleteMessages,
   seenMessage,
   deleteMessagesByChatId

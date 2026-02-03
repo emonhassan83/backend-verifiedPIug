@@ -6,11 +6,7 @@ import { uploadToS3 } from '../../utils/s3'
 import httpStatus from 'http-status'
 import { Message } from './messages.models'
 import AppError from '../../errors/AppError'
-import { TChat } from '../chat/chat.interface'
-import { Chat } from '../chat/chat.models'
-import { chatService } from '../chat/chat.service'
 import { storeFile } from '../../utils/fileHelper'
-import { io } from '../../../server'
 
 const createMessages = catchAsync(async (req: Request, res: Response) => {
   const id = `${Math.floor(100000 + Math.random() * 900000)}${Date.now()}`
@@ -28,19 +24,6 @@ const createMessages = catchAsync(async (req: Request, res: Response) => {
     success: true,
     message: 'Message sent successfully',
     data: result,
-  })
-})
-
-// Get all messages
-const getAllMessages = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getAllMessages(req.query)
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: 'Messages retrieved successfully',
-    meta: result.meta,
-    data: result.data,
   })
 })
 
@@ -136,7 +119,6 @@ const deleteMessagesByChatId = catchAsync(
 
 export const messagesController = {
   createMessages,
-  getAllMessages,
   getMessagesByChatId,
   getMessagesById,
   updateMessages,

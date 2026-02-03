@@ -37,7 +37,18 @@ const getChatById = catchAsync(async (req: Request, res: Response) => {
 })
 
 const updateChat = catchAsync(async (req: Request, res: Response) => {
-  const result = await chatService.updateChatList(req.params.id, req.body, req.user._id)
+  const result = await chatService.updateChatList(req.params.id, req.body, req.file, req.user._id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Chat updated successfully',
+    data: result,
+  })
+})
+
+const updateChatStatus = catchAsync(async (req: Request, res: Response) => {
+  const result = await chatService.updateChatStatus(req.params.id, req.body, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -63,5 +74,6 @@ export const chatController = {
   getMyChatList,
   getChatById,
   updateChat,
+  updateChatStatus,
   deleteChat,
 }

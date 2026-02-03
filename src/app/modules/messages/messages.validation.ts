@@ -17,7 +17,10 @@ const updateMessageValidation = z.object({
     text: z
       .string({ required_error: 'text is required' })
       .default('')
-      .optional()
+      .optional(),
+    imageUrl: z
+      .array(z.string({ required_error: 'image url is optional' }))
+      .optional(),
   }),
 })
 

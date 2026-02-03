@@ -28,9 +28,9 @@ router.delete(
 )
 
 router.get(
-  '/:roomId',
+  '/:chatId',
   auth(USER_ROLE.user, USER_ROLE.vendor, USER_ROLE.planer),
-  ParticipantController.getRoomParticipants,
+  ParticipantController.getChatParticipants,
 )
 
 export const ParticipantRoutes = router
