@@ -13,5 +13,6 @@ router.post(
 
 router.get('/', auth(USER_ROLE.user), FavoriteControllers.getAllIntoDB)
 router.get('/:id', auth(USER_ROLE.user), FavoriteControllers.getAIntoDB)
+router.delete('/:id', auth(USER_ROLE.user), FavoriteControllers.deleteAIntoDB)
 
 export const FavoriteRoutes = router

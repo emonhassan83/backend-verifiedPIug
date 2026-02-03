@@ -6,49 +6,48 @@ import { User } from '../user/user.model'
 import { Service } from '../service/service.models'
 
 const insertIntoDB = async (userId: string, serviceId: string) => {
-   // 1. Validate User
-  const user = await User.findById(userId);
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+  // 1️⃣ Validate User
+  const user = await User.findById(userId)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  // 2. Validate Service
-  const service = await Service.findById(serviceId);
-  if (!service || service?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!');
+  // 2️⃣ Validate Service
+  const service = await Service.findById(serviceId)
+  if (!service || service.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
-  // 3. Check if already favorited
+  // 3️⃣ Check existing favorite
   const existingFavorite = await Favorite.findOne({
     user: userId,
-    service: serviceId
-  });
+    service: serviceId,
+  })
 
+  // 🔁 Toggle OFF
   if (existingFavorite) {
-    // If exists → remove it (toggle off)
-    await Favorite.findByIdAndDelete(existingFavorite._id);
+    await Favorite.findByIdAndDelete(existingFavorite._id)
 
     return {
       isFavorite: false,
-      message: 'Favorite removed successfully!'
-    };
+      message: 'Favorite removed successfully!',
+    }
   }
 
-  // 4. Create new favorite (toggle on)
+  // 🔁 Toggle ON
   const favorite = await Favorite.create({
     user: userId,
-    service: serviceId
-  });
-
+    service: serviceId,
+  })
   if (!favorite) {
-    throw new AppError(httpStatus.CONFLICT, 'Favorite not created!');
+    throw new AppError(httpStatus.CONFLICT, 'Favorite not created!')
   }
 
   return {
     isFavorite: true,
     message: 'Favorite added successfully!',
-    data: favorite
-  };
+    data: favorite,
+  }
 }
 
 const getAllIntoDB = async (query: Record<string, unknown>) => {
@@ -61,9 +60,6 @@ const getAllIntoDB = async (query: Record<string, unknown>) => {
 
   const result = await favoriteQuery.modelQuery
   const meta = await favoriteQuery.countTotal()
-  if (!favoriteQuery) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Favorite not found!')
-  }
 
   return {
     meta,
@@ -80,8 +76,33 @@ const getAIntoDB = async (id: string) => {
   return result
 }
 
+const deleteAIntoDB = async (favoriteId: string, userId: string) => {
+  // 1️⃣ Validate User
+  const user = await User.findById(userId)
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+  }
+
+  const deal = await Favorite.findById({
+    _id: favoriteId,
+    userId,
+  })
+  if (!deal) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Favorites not found')
+  }
+
+  // Delete favorite
+  const result = await Favorite.findByIdAndDelete(favoriteId);
+  if (!result) {
+    throw new AppError(httpStatus.CONFLICT, 'Favorite not removed!')
+  }
+
+  return result
+}
+
 export const FavoriteService = {
   insertIntoDB,
   getAllIntoDB,
-  getAIntoDB
+  getAIntoDB,
+  deleteAIntoDB,
 }

@@ -1,114 +1,113 @@
-import { Server as HttpServer } from 'http';
-import { Server, Socket } from 'socket.io';
-import httpStatus from 'http-status';
-import { Types } from 'mongoose';
-import getUserDetailsFromToken from './app/utils/vaildateUserFromToken';
-import AppError from './app/errors/AppError';
-import { callbackFn } from './app/utils/CallbackFn';
-import { Chat } from './app/modules/chat/chat.models';
-import { Participant } from './app/modules/participant/participant.models';
-import { Message } from './app/modules/messages/messages.models';
-import { chatService } from './app/modules/chat/chat.service';
+import { Server as HttpServer } from 'http'
+import { Server, Socket } from 'socket.io'
+import httpStatus from 'http-status'
+import { Types } from 'mongoose'
+import getUserDetailsFromToken from './app/utils/vaildateUserFromToken'
+import AppError from './app/errors/AppError'
+import { callbackFn } from './app/utils/CallbackFn'
+import { Participant } from './app/modules/participant/participant.models'
+import { Chat } from './app/modules/chat/chat.models'
+import { Message } from './app/modules/messages/messages.models'
+import { chatService } from './app/modules/chat/chat.service'
+import { USER_STATUS } from './app/modules/user/user.constant'
 
-let ioInstance: Server | null = null;
+let ioInstance: Server | null = null
 
 const initializeSocketIO = (server: HttpServer) => {
   ioInstance = new Server(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST'],
-      credentials: true,
-    },
-  });
+    cors: { origin: '*', credentials: true },
+  })
 
-  // Track online users globally and per chat
-  const globalOnline = new Set<string>();
-  const onlineInChat = new Map<string, Set<string>>(); // chatId → Set<userId>
+  const globalOnline = new Set<string>()
+  const onlineInChat = new Map<string, Set<string>>()
 
   ioInstance.on('connection', async (socket: Socket) => {
-    console.log('Client connected:', socket.id);
+    console.log('connected:', socket.id)
 
     try {
-      // 1. Authenticate user
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.token;
-      let user: any;
+      const token =
+        socket.handshake.auth?.token || socket.handshake.headers?.token
+      let user: any
       try {
-        user = await getUserDetailsFromToken(token);
-        if (!user) throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token');
+        user = await getUserDetailsFromToken(token)
+        if (!user) throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid token')
       } catch (err) {
-        console.error('Authentication failed:', err);
-        socket.disconnect();
-        return;
+        console.log(err)
+        socket.disconnect()
+        return
       }
 
-      const userId = user._id.toString();
-      socket.data.user = user;
+      const userId = user._id.toString()
+      socket.data.user = user
 
-      // 2. Join personal room for notifications & chat list
-      socket.join(`user:${userId}`);
-      globalOnline.add(userId);
+      socket.join(`user:${userId}`)
+      globalOnline.add(userId)
 
-      // 3. Auto-join all chats (private + group) this user is part of
-      const userParticipants = await Participant.find({
+      // Auto-join all active chats
+      const userChats = await Participant.find({
         user: userId,
         isDeleted: false,
-        status: 'active',
-      }).select('chat');
+        status: USER_STATUS.active,
+      }).select('chat')
 
-      const joinedChats: string[] = [];
+      userChats.forEach((p) => {
+        const chatId = p.chat.toString()
+        socket.join(`chat:${chatId}`)
 
-      userParticipants.forEach((p) => {
-        const chatId = p.chat.toString();
-        socket.join(`chat:${chatId}`);
-        joinedChats.push(chatId);
-
-        if (!onlineInChat.has(chatId)) onlineInChat.set(chatId, new Set());
-        onlineInChat.get(chatId)!.add(userId);
+        if (!onlineInChat.has(chatId)) onlineInChat.set(chatId, new Set())
+        onlineInChat.get(chatId)!.add(userId)
 
         ioInstance!.to(`chat:${chatId}`).emit('chat:online-count', {
           chatId,
           count: onlineInChat.get(chatId)!.size,
-        });
-      });
+        })
+      })
 
-      ioInstance!.emit('onlineUser', globalOnline.size);
+      ioInstance!.emit('onlineUser', globalOnline.size)
 
       // =============================================
-      // EVENT: my-chat-list (all private + group chats)
+      // EVENT: my-chat-list (private + group)
       // =============================================
       socket.on('my-chat-list', async (_, callback) => {
         try {
-          const chatList = await chatService.getMyChatList(userId, {});
-          const eventName = `chat-list::${userId}`;
-          ioInstance!.to(`user:${userId}`).emit(eventName, chatList);
-          callbackFn(callback, { success: true, data: chatList });
+          const chatList = await chatService.getMyChatList(userId, {})
+          const eventName = `chat-list::${userId}`
+          ioInstance!.to(`user:${userId}`).emit(eventName, chatList)
+          callbackFn(callback, { success: true, data: chatList })
         } catch (err: any) {
-          callbackFn(callback, { success: false, message: err.message });
+          callbackFn(callback, { success: false, message: err.message })
         }
-      });
+      })
 
       // =============================================
       // EVENT: send-message (private or group)
       // =============================================
       socket.on('send-message', async (payload, callback) => {
         try {
-          const { chatId, text, imageUrl = [], receiver, replyTo } = payload;
+          const { chatId, text, imageUrl = [], receiver, replyTo } = payload
 
           if (!chatId || !text?.trim()) {
-            return callbackFn(callback, { success: false, message: 'chatId and text required' });
+            return callbackFn(callback, {
+              success: false,
+              message: 'chatId and text required',
+            })
           }
 
-          // Check if user is active participant
           const participant = await Participant.findOne({
             chat: chatId,
             user: userId,
             isDeleted: false,
             status: 'active',
-          });
-
+          })
           if (!participant) {
-            throw new AppError(httpStatus.FORBIDDEN, 'You cannot send messages in this chat');
+            throw new AppError(
+              httpStatus.FORBIDDEN,
+              'You cannot send messages here',
+            )
           }
+
+          const chat = await Chat.findById(chatId)
+          if (!chat) throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
 
           const messageData: any = {
             chat: chatId,
@@ -116,41 +115,35 @@ const initializeSocketIO = (server: HttpServer) => {
             text,
             imageUrl,
             replyTo: replyTo || null,
-          };
-
-          // Private chat → receiver required
-          const chat = await Chat.findById(chatId);
-          if (chat?.type === 'private') {
-            if (!receiver) throw new AppError(httpStatus.BAD_REQUEST, 'receiver required for private chat');
-            messageData.receiver = receiver;
           }
 
-          const message = await Message.create(messageData);
+          if (chat.type === 'private') {
+            if (!receiver)
+              throw new AppError(
+                httpStatus.BAD_REQUEST,
+                'receiver required for private chat',
+              )
+            messageData.receiver = receiver
+          }
+
+          const message = await Message.create(messageData)
 
           const populated = await Message.findById(message._id)
-            .populate('sender', 'username photoUrl email')
-            .populate('receiver', 'username photoUrl email');
+            .populate('sender', 'name photoUrl')
+            .populate('receiver', 'name photoUrl')
 
-          // Emit to chat room
-          ioInstance!.to(`chat:${chatId}`).emit('new-message', populated);
+          ioInstance!.to(`chat:${chatId}`).emit('new-message', populated)
 
-          // Update chat list for all participants
-          const chatMembers = await Participant.find({ chat: chatId, isDeleted: false }).select('user');
+          const chatMembers = await Participant.find({
+            chat: chatId,
+            isDeleted: false,
+          }).select('user')
           for (const member of chatMembers) {
-            const memberId = member.user.toString();
-            const list = await chatService.getMyChatList(memberId, {});
-            ioInstance!.to(`user:${memberId}`).emit(`chat-list::${memberId}`, list);
-          }
-
-          // Update unread count per user
-          for (const member of chatMembers) {
-            const memberId = member.user.toString();
-            const unreadInChat = await Message.countDocuments({
-              chat: chatId,
-              sender: { $ne: new Types.ObjectId(memberId) },
-              seen: false,
-            });
-            ioInstance!.to(`user:${memberId}`).emit(`unread-chat::${chatId}`, unreadInChat);
+            const memberId = member.user.toString()
+            const list = await chatService.getMyChatList(memberId, {})
+            ioInstance!
+              .to(`user:${memberId}`)
+              .emit(`chat-list::${memberId}`, list)
           }
 
           callbackFn(callback, {
@@ -158,36 +151,33 @@ const initializeSocketIO = (server: HttpServer) => {
             success: true,
             message: 'Message sent successfully',
             data: populated,
-          });
+          })
         } catch (err: any) {
-          console.error('send-message error:', err);
-          callbackFn(callback, { success: false, message: err.message });
+          callbackFn(callback, { success: false, message: err.message })
         }
-      });
+      })
 
-      // =============================================
-      // EVENT: Typing / Stop Typing
-      // =============================================
+      // Typing events
       socket.on('typing', ({ chatId }) => {
-        if (!chatId) return;
+        if (!chatId) return
         socket.to(`chat:${chatId}`).emit('typing', {
           userId,
           username: user.username || user.name || 'User',
-        });
-      });
+        })
+      })
 
       socket.on('stopTyping', ({ chatId }) => {
-        if (!chatId) return;
-        socket.to(`chat:${chatId}`).emit('stopTyping', { userId });
-      });
+        if (!chatId) return
+        socket.to(`chat:${chatId}`).emit('stopTyping', { userId })
+      })
 
-      // =============================================
-      // EVENT: Seen messages in a chat
-      // =============================================
+      // Seen messages
       socket.on('seen', async ({ chatId }, callback) => {
-        if (!chatId) {
-          return callbackFn(callback, { success: false, message: 'chatId required' });
-        }
+        if (!chatId)
+          return callbackFn(callback, {
+            success: false,
+            message: 'chatId required',
+          })
 
         try {
           await Message.updateMany(
@@ -196,67 +186,65 @@ const initializeSocketIO = (server: HttpServer) => {
               sender: { $ne: userId },
               seen: false,
             },
-            { seen: true }
-          );
+            { seen: true },
+          )
 
-          // Update chat list & unread for all participants
-          const chatMembers = await Participant.find({ chat: chatId, isDeleted: false }).select('user');
+          const chatMembers = await Participant.find({
+            chat: chatId,
+            isDeleted: false,
+          }).select('user')
           for (const member of chatMembers) {
-            const memberId = member.user.toString();
-            const list = await chatService.getMyChatList(memberId, {});
-            ioInstance!.to(`user:${memberId}`).emit(`chat-list::${memberId}`, list);
+            const memberId = member.user.toString()
+            const list = await chatService.getMyChatList(memberId, {})
+            ioInstance!
+              .to(`user:${memberId}`)
+              .emit(`chat-list::${memberId}`, list)
 
             const unread = await Message.countDocuments({
               chat: chatId,
               sender: { $ne: new Types.ObjectId(memberId) },
               seen: false,
-            });
-            ioInstance!.to(`user:${memberId}`).emit(`unread-chat::${chatId}`, unread);
+            })
+            ioInstance!
+              .to(`user:${memberId}`)
+              .emit(`unread-chat::${chatId}`, unread)
           }
 
-          callbackFn(callback, { success: true });
+          callbackFn(callback, { success: true })
         } catch (err: any) {
-          callbackFn(callback, { success: false, message: err.message });
+          callbackFn(callback, { success: false, message: err.message })
         }
-      });
+      })
 
-      // =============================================
-      // EVENT: Disconnect
-      // =============================================
+      // Disconnect
       socket.on('disconnect', () => {
-        joinedChats.forEach((chatId) => {
-          const users = onlineInChat.get(chatId);
+        userChats.forEach((p) => {
+          const chatId = p.chat.toString()
+          const users = onlineInChat.get(chatId)
           if (users) {
-            users.delete(userId);
+            users.delete(userId)
             ioInstance!.to(`chat:${chatId}`).emit('chat:online-count', {
               chatId,
               count: users.size || 0,
-            });
+            })
           }
-        });
+        })
 
-        globalOnline.delete(userId);
-        ioInstance!.emit('onlineUser', globalOnline.size);
-
-        console.log('User disconnected:', userId);
-      });
+        globalOnline.delete(userId)
+        ioInstance!.emit('onlineUser', globalOnline.size)
+      })
     } catch (err) {
-      console.error('Connection error:', err);
-      socket.disconnect();
+      console.error('Connection error:', err)
+      socket.disconnect()
     }
-  });
+  })
 
-  return ioInstance;
-};
+  return ioInstance
+}
 
-/**
- * Get Socket.IO instance from anywhere in the app
- */
 export const getIO = (): Server => {
-  if (!ioInstance) {
-    throw new Error('Socket.IO has not been initialized yet. Call initializeSocketIO first.');
-  }
-  return ioInstance;
-};
+  if (!ioInstance) throw new Error('Socket.IO not initialized')
+  return ioInstance
+}
 
-export default initializeSocketIO;
+export default initializeSocketIO

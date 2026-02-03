@@ -4,13 +4,16 @@ import sendResponse from '../../utils/sendResponse'
 import { FavoriteService } from './favorite.service'
 
 const insertIntoDB = catchAsync(async (req, res) => {
-  const result = await FavoriteService.insertIntoDB(req.user._id, req.params.serviceId)
+  const result = await FavoriteService.insertIntoDB(
+    req.user._id,
+    req.params.serviceId,
+  )
 
   sendResponse(res, {
-    statusCode: httpStatus.CREATED,
+    statusCode: httpStatus.OK,
     success: true,
-    message: 'Favorite added successfully!',
-    data: result,
+    message: result.message,
+    data: result.data,
   })
 })
 
@@ -38,8 +41,20 @@ const getAIntoDB = catchAsync(async (req, res) => {
   })
 })
 
+const deleteAIntoDB = catchAsync(async (req, res) => {
+  const result = await FavoriteService.deleteAIntoDB(req.params.id, req.user._id)
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Favorite removed successfully!',
+    data: result,
+  })
+})
+
 export const FavoriteControllers = {
   insertIntoDB,
   getAllIntoDB,
-  getAIntoDB
+  getAIntoDB,
+  deleteAIntoDB
 }

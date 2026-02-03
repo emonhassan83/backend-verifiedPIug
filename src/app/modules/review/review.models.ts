@@ -5,7 +5,6 @@ const reviewsSchema = new Schema<TReviews>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     author: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    service: { type: Schema.Types.ObjectId, ref: 'Service', required: true },
     order: { type: Schema.Types.ObjectId, ref: 'Order', required: true },
 
     ratings: {

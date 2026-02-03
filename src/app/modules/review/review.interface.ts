@@ -4,7 +4,6 @@ export interface TReviews {
   _id?: Types.ObjectId
   user: Types.ObjectId
   author: Types.ObjectId
-  service: Types.ObjectId
   order: Types.ObjectId
   ratings: {
     communicationSkills: number;

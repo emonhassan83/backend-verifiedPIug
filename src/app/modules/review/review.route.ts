@@ -28,9 +28,9 @@ router.delete(
 )
 
 router.get(
-  '/service/:serviceId',
-  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
-  reviewsController.getReviewsByService,
+  '/author/my-reviews',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  reviewsController.getAuthorReviews,
 )
 
 router.get(
@@ -44,6 +44,5 @@ router.get(
  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   reviewsController.getReviewsById,
 )
-
 
 export const ReviewsRoutes = router
