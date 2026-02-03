@@ -25,6 +25,10 @@ import { Order } from '../order/order.models'
 import { ORDER_STATUS } from '../order/order.constants'
 import { Project } from '../project/project.models'
 import { PROJECT_STATUS } from '../project/project.constants'
+import { PARTICIPANT_ROLE, PARTICIPANT_STATUS } from '../participant/participant.constants'
+import { Participant } from '../participant/participant.models'
+import { Chat } from '../chat/chat.models'
+import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
 
 const checkout = async (payload: TPayment) => {
   const transactionId = generateTransactionId()
@@ -214,27 +218,16 @@ const confirmPayment = async (query: Record<string, any>) => {
             status: ORDER_STATUS.running,
           }
 
-          // Check if project already exists for this order
-          const existingProject = await Project.findOne(
+          // Check if project already exists
+          let project = await Project.findOne(
             { order: order._id, isDeleted: false },
             null,
             { session },
           )
 
-          if (existingProject) {
-            // Project already exists → just update received amount & status if needed
-            await Project.findByIdAndUpdate(
-              existingProject._id,
-              {
-                received: payment.amount, // add the initial payment
-                status: PROJECT_STATUS.ongoing, // ensure it's ongoing
-                updatedAt: new Date(),
-              },
-              { session },
-            )
-          } else {
-            // No project yet → create new one
-            await Project.create(
+          if (!project) {
+            // Create new project
+            ;[project] = await Project.create(
               [
                 {
                   author: order.sender,
@@ -247,6 +240,91 @@ const confirmPayment = async (query: Record<string, any>) => {
                 },
               ],
               { session },
+            )
+          } else {
+            // Update existing project received amount
+            await Project.findByIdAndUpdate(
+              project._id,
+              {
+                $inc: { received: payment.amount },
+                status: PROJECT_STATUS.ongoing,
+                updatedAt: new Date(),
+              },
+              { session },
+            )
+          }
+
+          // =============================================
+          // AUTO CREATE / CHECK GROUP CHAT (duplicate-proof)
+          // =============================================
+          let groupChat = await Chat.findOne({
+            project: project._id,
+            type: CHAT_TYPE.group,
+            isDeleted: false,
+          }).session(session)
+
+          if (!groupChat) {
+            // Create new group chat
+            ;[groupChat] = await Chat.create(
+              [
+                {
+                  project: project._id,
+                  type: CHAT_TYPE.group,
+                  name: `${order.title} || ${order.finalAmount}`,
+                  image: null,
+                  status: CHAT_STATUS.active,
+                  isDeleted: false,
+                },
+              ],
+              { session },
+            )
+
+            // =============================================
+            // Add participants (duplicate-proof)
+            // =============================================
+            const potentialParticipants = [
+              {
+                user: order.sender,
+                role: PARTICIPANT_ROLE.planer || PARTICIPANT_ROLE.user, // sender/client role
+              },
+              {
+                user: order.receiver,
+                role: PARTICIPANT_ROLE.vendor || PARTICIPANT_ROLE.user, // receiver/vendor role
+              },
+            ]
+
+            // Existing participants prevent
+            const existingParticipants = await Participant.find({
+              chat: groupChat._id,
+              user: { $in: [order.sender, order.receiver] },
+              isDeleted: false,
+            }).session(session)
+
+            const existingUserIds = new Set(
+              existingParticipants.map((p) => p.user.toString()),
+            )
+
+            const newParticipants = potentialParticipants.filter(
+              (p) => !existingUserIds.has(p.user.toString()),
+            )
+
+            if (newParticipants.length > 0) {
+              const participantDocs = newParticipants.map((p) => ({
+                chat: groupChat!._id,
+                user: p.user,
+                role: p.role,
+                status: PARTICIPANT_STATUS.active,
+              }))
+
+              await Participant.insertMany(participantDocs, { session })
+            }
+
+            console.log(
+              `Group chat created for project ${project._id} with ${newParticipants.length} new participants`,
+            )
+          } else {
+            console.log(
+              `Group chat already exists for project ${project._id} — skipped creation`,
             )
           }
         }
@@ -271,15 +349,15 @@ const confirmPayment = async (query: Record<string, any>) => {
 
         //  Update existing project received amount on final payment
         if (!order.isCompleted && order.status !== ORDER_STATUS.completed) {
-        await Project.findOneAndUpdate(
-          { order: order._id, isDeleted: false },
-          {
-            $inc: { received: payment.amount },
-            status: PROJECT_STATUS.completed, // optional: mark project completed
-            updatedAt: new Date(),
-          },
-          { session },
-        )
+          await Project.findOneAndUpdate(
+            { order: order._id, isDeleted: false },
+            {
+              $inc: { received: payment.amount },
+              status: PROJECT_STATUS.completed, // optional: mark project completed
+              updatedAt: new Date(),
+            },
+            { session },
+          )
         }
 
         await Order.findByIdAndUpdate(payment.reference, updateFields, {

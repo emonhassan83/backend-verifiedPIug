@@ -25,7 +25,7 @@ const chatSchema = new Schema<TChat>(
     status: {
       type: String,
       enum: Object.values(CHAT_STATUS),
-      default: CHAT_STATUS.accepted,
+      default: CHAT_STATUS.active,
     },
     isDeleted: {
       type: Boolean,
