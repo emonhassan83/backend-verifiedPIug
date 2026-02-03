@@ -7,22 +7,55 @@ import { Message } from '../messages/messages.models'
 import { Participant } from '../participant/participant.models'
 import { Types } from 'mongoose'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { TChatStatus } from './chat.constants'
+import { CHAT_TYPE, TChatStatus } from './chat.constants'
 import { PARTICIPANT_ROLE } from '../participant/participant.constants'
 
 // Create chat
 const createChat = async (payload: TChat, userId: string) => {
   const { participants, ...restPayload } = payload
+
+  // Ensure participants exist
+  if (participants && participants.length === 0) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Participants are required for group chat',
+    )
+  }
+
+  // Private chat special check
+  if (restPayload.type === CHAT_TYPE.private && participants!.length !== 1) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'Private chat must have exactly 1 participant',
+    )
+  }
+
+  // Ensure owner exists
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.BAD_REQUEST, 'User not found')
   }
 
+  // Ensure participants' users exist
+  const participantUserIds = participants!.map((p) => p.user)
+  const existingUsers = await User.find({
+    _id: { $in: participantUserIds },
+    isDeleted: false,
+  })
+  if (existingUsers.length !== participantUserIds.length) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'One or more participant users do not exist or are deleted',
+    )
+  }
+
+  // Create chat
   const result = await Chat.create(restPayload)
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Chat creation failed')
   }
 
+  // Add owner as participant
   if (participants && participants.length > 0) {
     const participantDocs = participants.map((participant) => ({
       chat: result._id,
@@ -40,11 +73,9 @@ const getMyChatList = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const { page = 1, limit = 20 } = query
-
   const baseQuery = Chat.find({ isDeleted: false }).populate({
     path: 'participants.user',
-    select: 'username photoUrl email role',
+    select: 'name photoUrl role',
   })
 
   const queryBuilder = new QueryBuilder(baseQuery, query)
@@ -67,7 +98,7 @@ const getMyChatList = async (
     chats.map(async (chat) => {
       const lastMessage = await Message.findOne({ chat: chat._id })
         .sort({ createdAt: -1 })
-        .populate('sender', 'username photoUrl')
+        .populate('sender', 'name photoUrl')
 
       const unreadCount = await Message.countDocuments({
         chat: chat._id,
@@ -90,10 +121,7 @@ const getMyChatList = async (
 
 // Get chat by ID
 const getChatById = async (chatId: string, requestingUserId: string) => {
-  const chat = await Chat.findById(chatId).populate(
-    'owner',
-    'username photoUrl email',
-  )
+  const chat = await Chat.findById(chatId)
   if (!chat || chat?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
   }
