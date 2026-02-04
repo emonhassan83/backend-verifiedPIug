@@ -97,7 +97,7 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
   }
 
   // 8. sent receiver to notify them
-  await sendNewOrderNotification(receiverId, result)
+  await sendNewOrderNotification(receiverId, result, 'bookings')
 
   return result
 }
@@ -194,6 +194,7 @@ const changeStatusFromDB = async (id: string, payload: any) => {
     order.receiver as Types.ObjectId,
     order,
     status,
+    "bookings"
   )
 
   return result

@@ -297,7 +297,7 @@ const changePassword = async (
   }
 
   // Send a notification to the user informing them about the successful password change
-  user?.role === 'admin' && (await authNotifyUser('PASSWORD_CHANGE', user))
+  await authNotifyUser('PASSWORD_CHANGE', user, 'profile')
 
   return null
 }
@@ -357,7 +357,7 @@ const forgetPassword = async (payload: { email: string }) => {
     verification: {
       otp,
       expiresAt,
-      status: true
+      status: true,
     },
   })
 
@@ -457,7 +457,7 @@ const resetPassword = async (
   }
 
   // Send a notification to the admin informing them about the password reset
-  user?.role === 'admin' && (await authNotifyUser('PASSWORD_RESET', user))
+  await authNotifyUser('PASSWORD_RESET', user, 'profile')
 }
 
 export const AuthServices = {

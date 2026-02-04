@@ -5,6 +5,10 @@ import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
 import { sendNotification } from '../../utils/sentNotification'
 import config from '../../config'
+import {
+  canSendNotification,
+  TNotifyCategory,
+} from '../notification/notification.utils'
 
 export type TExpiresIn =
   | number
@@ -36,23 +40,25 @@ export const generateTokens = (user: TUser) => {
   const accessToken = createToken(
     jwtPayload,
     config.jwt_access_secret as string,
-    config.jwt_access_expires_in as TExpiresIn
+    config.jwt_access_expires_in as TExpiresIn,
   )
 
   const refreshToken = createToken(
     jwtPayload,
     config.jwt_refresh_secret as string,
-    config.jwt_refresh_expires_in as TExpiresIn
+    config.jwt_refresh_expires_in as TExpiresIn,
   )
 
   return { user, accessToken, refreshToken }
 }
 
-
 export const authNotifyUser = async (
   action: 'PASSWORD_CHANGE' | 'PASSWORD_FORGET' | 'PASSWORD_RESET',
   user: TUser,
+  category: TNotifyCategory,
 ) => {
+  if (!canSendNotification(user, category)) return
+
   // Determine the message and description based on the action
   let message
   let description

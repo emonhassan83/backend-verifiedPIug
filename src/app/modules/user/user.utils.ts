@@ -1,25 +1,32 @@
-import { modeType } from '../notification/notification.interface';
-import { messages } from '../notification/notification.constant';
-import { TUser } from './user.interface';
-import { findAdmin } from '../../utils/findAdmin';
-import { sendNotification } from '../../utils/sentNotification';
+import { modeType } from '../notification/notification.interface'
+import { messages } from '../notification/notification.constant'
+import { TUser } from './user.interface'
+import { findAdmin } from '../../utils/findAdmin'
+import { sendNotification } from '../../utils/sentNotification'
+import {
+  canSendNotification,
+  TNotifyCategory,
+} from '../notification/notification.utils'
 
 export const sendUserStatusNotifYToAdmin = async (
   status: 'active' | 'blocked',
   user: TUser,
+  category: TNotifyCategory,
 ) => {
-  const admin = await findAdmin();
-  if (!admin || !admin?.fcmToken) throw new Error('Admin not found or missing FCM token!');
+  const admin = await findAdmin()
+  if (!admin || !admin?.fcmToken) return
 
-  let message = '';
-  let description = '';
+  if (!canSendNotification(user, category)) return
+
+  let message = ''
+  let description = ''
 
   if (status === 'active') {
-    message = messages.userManagement.accountActivated;
-    description = `User ${user?.name} (ID: ${user?.id}) has been successfully activated.`;
+    message = messages.userManagement.accountActivated
+    description = `User ${user?.name} (ID: ${user?.id}) has been successfully activated.`
   } else {
-    message = messages.userManagement.accountDeactivated;
-    description = `User ${user?.name} (ID: ${user?.id}) has been blocked from accessing the system.`;
+    message = messages.userManagement.accountDeactivated
+    description = `User ${user?.name} (ID: ${user?.id}) has been blocked from accessing the system.`
   }
 
   const notifyPayload = {
@@ -28,27 +35,27 @@ export const sendUserStatusNotifYToAdmin = async (
     description,
     reference: user._id,
     model_type: modeType.User,
-  };
+  }
 
-  await sendNotification([admin.fcmToken], notifyPayload);
-};
-
+  await sendNotification([admin.fcmToken], notifyPayload)
+}
 
 export const sendUserStatusNotifYToUser = async (
   status: 'active' | 'blocked',
   user: TUser,
+  category: TNotifyCategory,
 ) => {
-  if (!user?.fcmToken) throw new Error('User FCM token is missing!');
+  if (!canSendNotification(user, category)) return
 
-  let message = '';
-  let description = '';
+  let message = ''
+  let description = ''
 
   if (status === 'active') {
-    message = messages.userManagement.accountActivated;
-    description = `Your account has been successfully activated. You can now access all available features.`;
+    message = messages.userManagement.accountActivated
+    description = `Your account has been successfully activated. You can now access all available features.`
   } else {
-    message = messages.userManagement.accountDeactivated;
-    description = `Your account has been blocked. Please contact support for further assistance.`;
+    message = messages.userManagement.accountDeactivated
+    description = `Your account has been blocked. Please contact support for further assistance.`
   }
 
   const notifyPayload = {
@@ -57,7 +64,7 @@ export const sendUserStatusNotifYToUser = async (
     description,
     reference: user._id,
     model_type: modeType.User,
-  };
+  }
 
-  await sendNotification([user.fcmToken], notifyPayload);
-};
+  await sendNotification([user.fcmToken], notifyPayload)
+}

@@ -4,12 +4,21 @@ import { modeType } from '../notification/notification.interface'
 import { User } from '../user/user.model'
 import { Types } from 'mongoose'
 import { ORDER_STATUS } from './order.constants'
+import {
+  canSendNotification,
+  TNotifyCategory,
+} from '../notification/notification.utils'
 
 // 1. When crate order then sent notification only receiver
 export const sendNewOrderNotification = async (
   receiverId: Types.ObjectId,
-  order: any
+  order: any,
+  category: TNotifyCategory,
 ) => {
+  const user = await User.findById(receiverId)
+  if (!user) return
+  if (!canSendNotification(user, category)) return
+
   const message = messages.order.newOrder
   const description = `You have received a new order request: "${order.title}". Please review and respond.`
 
@@ -22,10 +31,7 @@ export const sendNewOrderNotification = async (
   }
 
   // Push notification
-  const receiver = await User.findById(receiverId).select('fcmToken')
-  if (receiver?.fcmToken) {
-    await sendNotification([receiver.fcmToken], notifyPayload)
-  }
+  await sendNotification([user.fcmToken], notifyPayload)
 }
 
 // 2. Order Status Changed Notification (sender + receiver both)
@@ -34,7 +40,16 @@ export const changeOrderStatusNotification = async (
   receiverId: Types.ObjectId,
   order: any,
   status: keyof typeof ORDER_STATUS,
+  category: TNotifyCategory,
 ) => {
+  const receiver = await User.findById(receiverId)
+  if (!receiver) return
+  if (!canSendNotification(receiver, category)) return
+
+  const sender = await User.findById(senderId)
+  if (!sender) return
+  if (!canSendNotification(sender, category)) return
+
   let message = ''
   let description = ''
 
@@ -72,13 +87,6 @@ export const changeOrderStatusNotification = async (
     model_type: modeType.Order,
   }
 
-  const receiver = await User.findById(receiverId).select('fcmToken')
-  if (receiver?.fcmToken) {
-    await sendNotification([receiver.fcmToken], notifyPayload)
-  }
-
-  const sender = await User.findById(senderId).select('fcmToken')
-  if (sender?.fcmToken) {
-    await sendNotification([sender.fcmToken], notifyPayload)
-  }
+  await sendNotification([receiver.fcmToken], notifyPayload)
+  await sendNotification([sender.fcmToken], notifyPayload)
 }

@@ -1,11 +1,12 @@
 import { modeType } from '../notification/notification.interface'
 import { messages } from '../notification/notification.constant'
 import { NotificationService } from '../notification/notification.service'
+import { TUser } from '../user/user.interface'
 
 export const refundAddNotifyToVendor = async (
   action: 'ADDED',
-  user: any,
-  vendor: any,
+  user: TUser,
+  vendor: TUser,
   refund: any,
 ) => {
   // Determine the message and description based on the action

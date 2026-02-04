@@ -102,14 +102,14 @@ const changeUserStatusFromDB = async (payload: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  const updateUserStatus = await User.findByIdAndUpdate(
+  const result = await User.findByIdAndUpdate(
     userId,
     { status },
     { new: true },
   ).select(
     '_id id name email photoUrl address contractNumber locationUrl socialProfiles role avgRating ratingCount status isKycVerified createdAt',
   )
-  if (!updateUserStatus) {
+  if (!result) {
     throw new AppError(
       httpStatus.NOT_FOUND,
       'User not found and failed to update status!',
@@ -117,10 +117,10 @@ const changeUserStatusFromDB = async (payload: any) => {
   }
 
   // Send notification to both user and admin
-  await sendUserStatusNotifYToUser(status, updateUserStatus)
-  await sendUserStatusNotifYToAdmin(status, updateUserStatus)
+  await sendUserStatusNotifYToUser(status, result, 'profile')
+  await sendUserStatusNotifYToAdmin(status, result, 'profile')
 
-  return updateUserStatus
+  return result
 }
 
 const updateNotifySettings = async (

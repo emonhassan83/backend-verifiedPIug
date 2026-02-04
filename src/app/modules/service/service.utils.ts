@@ -5,6 +5,7 @@ import { SERVICE_STATUS } from './service.constants'
 import { TUser } from '../user/user.interface'
 import { TService } from './service.interface'
 import { Favorite } from '../favorite/favorite.model'
+import { canSendNotification, TNotifyCategory } from '../notification/notification.utils'
 
 export const attachFavoriteFlag = async (
   services: any[],
@@ -36,10 +37,11 @@ export const attachFavoriteFlag = async (
 
 export const sendServiceStatusNotifyToAuthor = async (
   status: keyof typeof SERVICE_STATUS,
-  author: TUser,
+  user: TUser,
   service: TService,
+  category: TNotifyCategory,
 ) => {
-  if (!author?.fcmToken) return // silent fail (best practice)
+  if (!canSendNotification(user, category)) return
 
   let message = ''
   let description = ''
@@ -57,12 +59,12 @@ export const sendServiceStatusNotifyToAuthor = async (
   }
 
   const notifyPayload = {
-    receiver: author._id,
+    receiver: user._id,
     message,
     description,
     reference: service._id,
     model_type: modeType.Service,
   }
 
-  await sendNotification([author.fcmToken], notifyPayload)
+  await sendNotification([user.fcmToken], notifyPayload)
 }

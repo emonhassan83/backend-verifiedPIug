@@ -99,6 +99,7 @@ const getAIntoDB = async (id: string) => {
 // Update Verification
 const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
   const { status } = payload
+
   const verification = await Verification.findById(id)
   if (!verification) {
     throw new AppError(httpStatus.NOT_FOUND, 'Verification not found!')
@@ -126,9 +127,11 @@ const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
       { new: true },
     )
   }
-
   // Trigger KYC Notification Util
-  await sendKycStatusNotification(result)
+  const user = await User.findById(verification.user)
+  if (user && user?.fcmToken) {
+    await sendKycStatusNotification(result, user, 'profile')
+  }
 
   return result
 }

@@ -273,7 +273,12 @@ const changeStatusFromDB = async (id: string, payload: any) => {
   }
 
   // 🔔 Send notification only if status changed
-  await sendServiceStatusNotifyToAuthor(status, service.author as any, service)
+  await sendServiceStatusNotifyToAuthor(
+    status,
+    service.author as any,
+    service,
+    'service',
+  )
 
   return result
 }
