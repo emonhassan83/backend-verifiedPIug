@@ -13,25 +13,32 @@ import { vendorProjectAssignNotify } from './assignProject.utils'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
 import { Participant } from '../participant/participant.models'
-import { PARTICIPANT_ROLE, PARTICIPANT_STATUS } from '../participant/participant.constants'
+import {
+  PARTICIPANT_ROLE,
+  PARTICIPANT_STATUS,
+} from '../participant/participant.constants'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
-    const { project: projectId, vendor: vendorId, vendorOrder: vendorOrderId } = payload;
+    const {
+      project: projectId,
+      vendor: vendorId,
+      vendorOrder: vendorOrderId,
+    } = payload
 
     // 1. Requester validation
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session)
     if (!user || user.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
     }
 
     // 2. Vendor validation
-    const vendor = await User.findById(vendorId).session(session);
+    const vendor = await User.findById(vendorId).session(session)
     if (!vendor || vendor.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found')
     }
 
     // 3. Vendor Order validation
@@ -40,24 +47,24 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
       authority: ORDER_AUTHORITY.vendor,
       receiver: vendorId,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
     if (!order) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Order not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Order not found')
     }
 
     // 4. Project validation
-    const project = await Project.findById(projectId).session(session);
+    const project = await Project.findById(projectId).session(session)
     if (!project || project.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Project data not found');
+      throw new AppError(httpStatus.NOT_FOUND, 'Project data not found')
     }
 
     // 5. Assign project creation
-    payload.assignedBy = new Types.ObjectId(userId);
-    payload.agreedAmount = order.finalAmount;
+    payload.assignedBy = new Types.ObjectId(userId)
+    payload.agreedAmount = order.finalAmount
 
-    const assignedProject = await AssignProject.create([payload], { session });
+    const assignedProject = await AssignProject.create([payload], { session })
     if (!assignedProject[0]) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Project assign failed');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Project assign failed')
     }
 
     // =============================================
@@ -68,11 +75,11 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
       project: projectId,
       type: CHAT_TYPE.group,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     if (!groupChat) {
       // Create new group chat
-      [groupChat] = await Chat.create(
+      ;[groupChat] = await Chat.create(
         [
           {
             project: projectId,
@@ -83,8 +90,8 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
             isDeleted: false,
           },
         ],
-        { session }
-      );
+        { session },
+      )
     }
 
     // 2. Check if vendor is already a participant
@@ -92,7 +99,7 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
       chat: groupChat._id,
       user: vendorId,
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     if (!existingParticipant) {
       // Add vendor as participant
@@ -105,33 +112,34 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
             status: PARTICIPANT_STATUS.active,
           },
         ],
-        { session }
-      );
+        { session },
+      )
     }
 
     // =============================================
     // Final updates & notifications
     // =============================================
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     // Send notification to vendor
     await vendorProjectAssignNotify(
-      new Types.ObjectId(vendorId),
+      vendor,
       order,
-      assignedProject[0].status
-    );
+      assignedProject[0].status,
+      'bookings',
+    )
 
-    return assignedProject[0];
+    return assignedProject[0]
   } catch (error: any) {
-    await session.abortTransaction();
+    await session.abortTransaction()
     throw new AppError(
       error.statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-      error.message || 'Project assignment failed'
-    );
+      error.message || 'Project assignment failed',
+    )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 // Get all assign project data
 const getAllIntoDB = async (query: Record<string, any>) => {
@@ -231,8 +239,9 @@ const updateStatusIntoDB = async (
 
   // sent notify to vendor
   const order = await Order.findById(result.vendorOrder)
-  if (order) {
-    await vendorProjectAssignNotify(result.vendor, order, status)
+  const vendor = await User.findById(result.vendor)
+  if (order && vendor) {
+    await vendorProjectAssignNotify(vendor, order, status, 'bookings')
   }
 
   return result

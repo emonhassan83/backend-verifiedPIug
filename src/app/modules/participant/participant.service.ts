@@ -4,7 +4,7 @@ import AppError from '../../errors/AppError'
 import { TParticipant } from './participant.interface'
 import { User } from '../user/user.model'
 import { Participant } from './participant.models'
-import { getRequesterRole } from './participant.utils'
+import { getRequesterRole, notifyChatParticipants } from './participant.utils'
 import { getIO } from '../../../socket'
 import { Chat } from '../chat/chat.models'
 import { TParticipantStatus } from './participant.constants'
@@ -111,15 +111,27 @@ const updateParticipant = async (
     throw new AppError(httpStatus.FORBIDDEN, 'Insufficient permissions')
   }
 
-  const result = await Participant.findByIdAndUpdate(participantId, { status }, { new: true })
+  const result = await Participant.findByIdAndUpdate(
+    participantId,
+    { status },
+    { new: true },
+  )
   if (!result) {
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to update participant')
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Failed to update participant',
+    )
   }
 
   // Emit real-time update
   const io = getIO()
   io.to(participant.chat.toString()).emit('participant:updated', result)
-  
+
+  // 6. Send push notification to other active participants (exclude actor)
+  if (status) {
+    await notifyChatParticipants(participant.chat, requesterId, status, 'service')
+  }
+
   return result
 }
 

@@ -10,6 +10,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { CHAT_TYPE, TChatStatus } from './chat.constants'
 import { PARTICIPANT_ROLE } from '../participant/participant.constants'
 import { uploadToS3 } from '../../utils/s3'
+import { notifyChatParticipants } from './chat.utils'
 
 // Create chat
 const createChat = async (payload: TChat, userId: string) => {
@@ -217,6 +218,15 @@ const updateChatStatus = async (
     { status },
     { new: true, runValidators: true },
   )
+
+   // 🔔 Notify all participants
+  await notifyChatParticipants(
+    new Types.ObjectId(id),
+    new Types.ObjectId(userId),
+    payload.status,
+    'service',
+  )
+
   return result
 }
 

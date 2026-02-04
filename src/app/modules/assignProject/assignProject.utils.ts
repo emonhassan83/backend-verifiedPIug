@@ -1,15 +1,23 @@
-import { Types } from "mongoose"
-import { sendNotification } from "../../utils/sentNotification"
-import { messages } from "../notification/notification.constant"
-import { modeType } from "../notification/notification.interface"
-import { User } from "../user/user.model"
-import { VENDOR_ASSIGNMENT_STATUS } from "./assignProject.constants"
+import { Types } from 'mongoose'
+import { sendNotification } from '../../utils/sentNotification'
+import { messages } from '../notification/notification.constant'
+import { modeType } from '../notification/notification.interface'
+import { User } from '../user/user.model'
+import { VENDOR_ASSIGNMENT_STATUS } from './assignProject.constants'
+import {
+  canSendNotification,
+  TNotifyCategory,
+} from '../notification/notification.utils'
+import { TUser } from '../user/user.interface'
 
 export const vendorProjectAssignNotify = async (
-  userId: Types.ObjectId,
+  user: TUser,
   order: any,
   status: keyof typeof VENDOR_ASSIGNMENT_STATUS,
+  category: TNotifyCategory,
 ) => {
+  if (!canSendNotification(user, category)) return
+  
   let message = ''
   let description = ''
 
@@ -40,15 +48,12 @@ export const vendorProjectAssignNotify = async (
   }
 
   const notifyPayload = {
-    receiver: userId,
+    receiver: user._id,
     reference: order._id,
     message,
     description,
     model_type: modeType.AssignProject,
   }
 
-  const user = await User.findById(userId).select('fcmToken')
-  if (user && user?.fcmToken) {
-    await sendNotification([user.fcmToken], notifyPayload)
-  }
+  await sendNotification([user.fcmToken], notifyPayload)
 }

@@ -72,7 +72,7 @@ const createRefundIntoDB = async (payload: TRefund, userId: string) => {
   }
 
   // 5. Notify Receiver
-  await refundAddNotifyToVendor('ADDED', user, receiver._id, refund)
+  await refundAddNotifyToVendor('ADDED', user, receiver, refund, 'bookings')
 
   return refund
 }
@@ -246,7 +246,7 @@ const updateRefundStatusFromDB = async (
     // 8. Notify user
     const user = await User.findById(refund.sender).session(session);
     if (user) {
-      await refundChangeStatusNotifyToUser('CHANGED_STATUS', user, updatedRefund);
+      await refundChangeStatusNotifyToUser('CHANGED_STATUS', user, updatedRefund, 'bookings');
     }
 
     await session.commitTransaction();
