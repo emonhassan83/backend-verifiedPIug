@@ -16,8 +16,12 @@ import { startSession, Types } from 'mongoose'
 import * as crypto from 'crypto'
 import { PAYMENT_STATUS } from './payment.constant'
 import { sendNotification } from '../../utils/sentNotification'
-import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
+import {
+  RENEW_STATUS,
+  SUBSCRIPTION_STATUS,
+} from '../subscription/subscription.constants'
 import { DURATION_TYPE } from '../package/package.constant'
+import { canSendNotification } from '../notification/notification.utils'
 
 export const paystack = Paystack(config.paystack.secret_key)
 
@@ -173,9 +177,11 @@ export const handlePaystackWebhook = async (req: any) => {
             paymentStatus: {
               $in: [PAYMENT_STATUS.unpaid, PAYMENT_STATUS.paid],
             },
-            createdAt: { $gte: new Date(Date.now() - 20 * 60 * 1000) },
+            createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // ৩০ মিনিটের মধ্যে
             isDeleted: false,
-          }).session(session)
+          })
+            .sort({ createdAt: -1 })
+            .session(session)
         }
 
         if (!subscription) {
@@ -234,7 +240,7 @@ export const handlePaystackWebhook = async (req: any) => {
             ),
             isExpired: false,
             status: SUBSCRIPTION_STATUS.active,
-            autoRenew: true,
+            autoRenew: RENEW_STATUS.active,
           },
           { session, new: true },
         )
@@ -251,6 +257,10 @@ export const handlePaystackWebhook = async (req: any) => {
           { session },
         )
 
+        // Allow for notification
+        if (!canSendNotification(user, 'subscription')) return
+
+        // Sent notify
         const notifyPayload = {
           receiver: user._id,
           message: messages.subscription.newPlan,
@@ -258,10 +268,7 @@ export const handlePaystackWebhook = async (req: any) => {
           reference: subscription._id,
           model_type: modeType.Subscription,
         }
-
-        if (user?.fcmToken) {
-          await sendNotification([user.fcmToken], notifyPayload)
-        }
+        await sendNotification([user.fcmToken], notifyPayload)
 
         break
       }
@@ -288,10 +295,14 @@ export const handlePaystackWebhook = async (req: any) => {
         // সবচেয়ে নির্ভরযোগ্য উপায়: সাম্প্রতিক paid সাবস্ক্রিপশন খোঁজা
         let subscription = await Subscription.findOne({
           user: user._id,
-          paymentStatus: PAYMENT_STATUS.paid,
+          status: {
+            $in: [SUBSCRIPTION_STATUS.pending, SUBSCRIPTION_STATUS.active],
+          },
           isDeleted: false,
-          createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // ৩০ মিনিটের মধ্যে
-        }).session(session)
+          createdAt: { $gte: new Date(Date.now() - 45 * 60 * 1000) },
+        })
+          .sort({ createdAt: -1 })
+          .session(session)
 
         // যদি না পাওয়া যায় তাহলে সবচেয়ে নতুন সাবস্ক্রিপশন নেওয়া
         if (!subscription) {
@@ -314,18 +325,25 @@ export const handlePaystackWebhook = async (req: any) => {
         }
 
         // আপডেট
-        await Subscription.findByIdAndUpdate(
+        const updated = await Subscription.findByIdAndUpdate(
           subscription._id,
           {
             subscriptionCode: subscription_code,
             emailToken: email_token,
             status: SUBSCRIPTION_STATUS.active,
             createdAt: new Date(event.data.createdAt),
-            autoRenew: true,
+            autoRenew: RENEW_STATUS.active,
           },
           { session, new: true },
         )
+        console.log(
+          `[subscription.create] Updated subscription: ${updated?._id} | code: ${subscription_code}`,
+        )
 
+        // Allow for notification
+        if (!canSendNotification(user, 'subscription')) return
+
+        // Sent notify
         const notifyPayload = {
           receiver: user._id,
           message: messages.subscription.newPlan,
@@ -333,11 +351,7 @@ export const handlePaystackWebhook = async (req: any) => {
           reference: subscription._id,
           model_type: modeType.Subscription,
         }
-
-        if (user?.fcmToken) {
-          await sendNotification([user.fcmToken], notifyPayload)
-        }
-
+        await sendNotification([user.fcmToken], notifyPayload)
         break
       }
 
@@ -363,6 +377,10 @@ export const handlePaystackWebhook = async (req: any) => {
         }
 
         if (subscription && user) {
+          // Allow for notification
+          if (!canSendNotification(user, 'subscription')) return
+
+          // Sent notify
           const notifyPayload = {
             receiver: subscription.user,
             message: messages.paymentManagement.upcomingCharge,
@@ -402,22 +420,13 @@ export const handlePaystackWebhook = async (req: any) => {
             subscription._id,
             {
               status: SUBSCRIPTION_STATUS.cancelled,
-              autoRenew: false,
+              autoRenew: RENEW_STATUS.disabled,
               isExpired: true,
             },
             { session },
           )
 
-          const notifyPayload = {
-            receiver: subscription.user,
-            message: messages.subscription.cancelled,
-            description: `Your subscription ${subscription_code} auto-renew has been disabled.`,
-            reference: subscription._id,
-            model_type: modeType.Subscription,
-          }
-
-          await sendNotification([user.fcmToken], notifyPayload)
-
+          // sent admin to notify
           const admin = await findAdmin()
           if (admin && admin.fcmToken) {
             const notifyPayload = {
@@ -429,6 +438,19 @@ export const handlePaystackWebhook = async (req: any) => {
             }
             await sendNotification([admin.fcmToken], notifyPayload)
           }
+
+          // Allow for notification
+          if (!canSendNotification(user, 'subscription')) return
+
+          // Sent notify
+          const notifyPayload = {
+            receiver: subscription.user,
+            message: messages.subscription.cancelled,
+            description: `Your subscription ${subscription_code} auto-renew has been disabled.`,
+            reference: subscription._id,
+            model_type: modeType.Subscription,
+          }
+          await sendNotification([user.fcmToken], notifyPayload)
         } else {
           console.warn(`Subscription not found: ${subscription_code}`)
         }
@@ -468,16 +490,7 @@ export const handlePaystackWebhook = async (req: any) => {
             { session },
           )
 
-          const notifyPayload = {
-            receiver: payment.user,
-            message: messages.paymentManagement.paymentRefunded,
-            description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
-            reference: payment._id,
-            model_type: modeType.Payment,
-          }
-
-          await sendNotification([user.fcmToken], notifyPayload)
-
+          // sent message for admin notify
           const admin = await findAdmin()
           if (admin && admin.fcmToken) {
             const notifyPayload = {
@@ -490,6 +503,20 @@ export const handlePaystackWebhook = async (req: any) => {
 
             await sendNotification([admin.fcmToken], notifyPayload)
           }
+
+          // Allow for notification
+          if (!canSendNotification(user, 'subscription')) return
+
+          // Sent notify
+          const notifyPayload = {
+            receiver: payment.user,
+            message: messages.paymentManagement.paymentRefunded,
+            description: `A refund of ₦${amount / 100} has been processed for transaction ${transaction_reference}.`,
+            reference: payment._id,
+            model_type: modeType.Payment,
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
         }
         break
       }
@@ -528,16 +555,7 @@ export const handlePaystackWebhook = async (req: any) => {
           const manageLink =
             await getSubscriptionManagementLink(subscription_code)
 
-          const notifyPayload = {
-            receiver: subscription.user,
-            message: messages.paymentManagement.paymentFailed,
-            description: `Your subscription payment of ₦${amount / 100} failed. Update payment method: ${manageLink}`,
-            reference: subscription._id,
-            model_type: modeType.Subscription,
-          }
-
-          await sendNotification([user.fcmToken], notifyPayload)
-
+          // sent admin notify
           const admin = await findAdmin()
           if (admin && admin.fcmToken) {
             const notifyPayload = {
@@ -550,6 +568,20 @@ export const handlePaystackWebhook = async (req: any) => {
 
             await sendNotification([user.fcmToken], notifyPayload)
           }
+
+          // Allow for notification
+          if (!canSendNotification(user, 'subscription')) return
+
+          // Sent notify
+          const notifyPayload = {
+            receiver: subscription.user,
+            message: messages.paymentManagement.paymentFailed,
+            description: `Your subscription payment of ₦${amount / 100} failed. Update payment method: ${manageLink}`,
+            reference: subscription._id,
+            model_type: modeType.Subscription,
+          }
+
+          await sendNotification([user.fcmToken], notifyPayload)
         }
         break
       }
@@ -713,7 +745,9 @@ export const paymentNotifyToUser = async (
   payment: TPayment,
 ) => {
   const user = await User.findById(payment.user)
-  if (!user || !user.fcmToken) return
+  // Allow for notification
+  if (!user) return
+  if (!canSendNotification(user, 'subscription')) return
 
   // Define message and description based on type
   const message =

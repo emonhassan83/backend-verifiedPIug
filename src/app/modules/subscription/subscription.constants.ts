@@ -1,13 +1,13 @@
 export const SUBSCRIPTION_TYPE = {
-  verified: 'verified',
-  premium: 'premium',
-  planner_pro: 'planner_pro',
+  pro: 'pro',
+  elite: 'elite',
 } as const
 
 export const SUBSCRIPTION_STATUS = {
   pending: 'pending',
   active: 'active',
   cancelled: 'cancelled',
+  suspend: 'suspend',
 } as const
 
 export const PAYMENT_STATUS = {
@@ -18,7 +18,7 @@ export const PAYMENT_STATUS = {
 
 export const RENEW_STATUS = {
   active: 'active',
-  disabled: 'disabled'
+  disabled: 'disabled',
 } as const
 
 export type TSubscriptionType = keyof typeof SUBSCRIPTION_TYPE

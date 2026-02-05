@@ -24,6 +24,8 @@ const refundSchema = new Schema<TRefund>(
       ref: 'Order',
       required: true,
     },
+    paymentIntentId: { type: String },
+    amount: { type: Number, required: true, min: 0 },
     reason: { type: String, required: true },
     status: {
       type: String,

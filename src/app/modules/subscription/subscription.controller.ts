@@ -3,6 +3,7 @@ import catchAsync from '../../utils/catchAsync'
 import { subscriptionService } from './subscription.service'
 import sendResponse from '../../utils/sendResponse'
 import httpStatus from 'http-status'
+import { PAYMENT_STATUS, SUBSCRIPTION_STATUS } from './subscription.constants'
 
 const createSubscription = catchAsync(async (req: Request, res: Response) => {
   req.body.user = req?.user?._id
@@ -30,15 +31,16 @@ const getAllSubscription = catchAsync(async (req: Request, res: Response) => {
 
 const getMySubscription = catchAsync(async (req: Request, res: Response) => {
   req.query['user'] = req.user._id;
+  req.query['status'] = SUBSCRIPTION_STATUS.active
+  req.query['paymentStatus'] = PAYMENT_STATUS.paid
 
   const result = await subscriptionService.getAllSubscription(req.query)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'All subscriptions fetched successfully !',
-    meta: result?.meta,
-    data: result?.data,
+    message: 'My subscription fetched successfully !',
+    data: result?.data[0],
   })
 })
 

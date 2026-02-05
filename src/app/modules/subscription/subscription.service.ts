@@ -76,7 +76,7 @@ const createSubscription = async (payload: TSubscriptions) => {
       user: payload.user,
       package: payload.package,
       paymentStatus: PAYMENT_STATUS.unpaid,
-      status: 'pending',
+      status: SUBSCRIPTION_STATUS.pending,
     }).session(session)
 
     if (isExist) {
@@ -97,6 +97,7 @@ const createSubscription = async (payload: TSubscriptions) => {
 
     // Not a valid verified student
     payload.amount = packages.price
+    payload.type = packages.type
 
     // Determine the expiration date based on billing cycle
     let expiredAt
@@ -145,7 +146,7 @@ const createSubscription = async (payload: TSubscriptions) => {
 
 const getAllSubscription = async (query: Record<string, any>) => {
   const subscriptionsModel = new QueryBuilder(
-    Subscription.find({ isDeleted: false, isExpired: false }).populate([
+    Subscription.find({ isDeleted: false }).populate([
       {
         path: 'package',
         select: '',
@@ -272,11 +273,11 @@ const enableSubscription = async (subscriptionId: string, userId: string) => {
   )
 
   // Return authorization URL for redirect
-  if (result.authorizationUrl) {
+  if (result!.authorizationUrl) {
     return {
       status: 'pending',
       message: 'Please complete the payment to enable auto-renew.',
-      authorizationUrl: result.authorizationUrl,
+      authorizationUrl: result!.authorizationUrl,
     }
   }
 

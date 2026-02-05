@@ -33,7 +33,7 @@ router.get(
 )
 
 router.get(
-  '/my-subscriptions',
+  '/my-subscription',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   subscriptionController.getMySubscription,
 )

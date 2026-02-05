@@ -15,7 +15,7 @@ export const canSendNotification = (
   category: TNotifyCategory,
 ): boolean => {
   // ❌ No token → no notify
-  if (!user?.fcmToken) return false
+  if (!user || !user?.fcmToken) return false
 
   // 🔹 Admin → always allowed
   if (user.role === USER_ROLE.admin) return true

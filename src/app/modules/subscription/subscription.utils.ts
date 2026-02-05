@@ -12,6 +12,7 @@ import { RENEW_STATUS, SUBSCRIPTION_STATUS } from './subscription.constants'
 import { TUser } from '../user/user.interface'
 import { TSubscriptions } from './subscription.interface'
 import { USER_STATUS } from '../user/user.constant'
+import { canSendNotification } from '../notification/notification.utils'
 
 // Cancel Paystack subscription
 export const cancelPaystackSubscription = async (
@@ -45,8 +46,7 @@ export const cancelPaystackSubscription = async (
     console.log({ response })
 
     if (response.data.status) {
-      const isExpired =
-        sub.expiredAt && sub.expiredAt < new Date()
+      const isExpired = sub.expiredAt && sub.expiredAt < new Date()
       await Subscription.findByIdAndUpdate(
         sub._id,
         {
@@ -59,9 +59,10 @@ export const cancelPaystackSubscription = async (
         { new: true },
       )
 
-      const user = await User.findById(sub.user).select('fcmToken')
-      if (user && user?.fcmToken) {
-        // Create a notification entry
+      const user = await User.findById(sub.user)
+      // Create a notification entry
+      if (user) {
+        if (!canSendNotification(user, 'subscription')) return
         const notifyPayload = {
           receiver: sub.user,
           message: messages.subscription.cancelled,
@@ -100,7 +101,10 @@ export const enablePaystackSubscription = async (
   emailToken: string,
 ) => {
   try {
-    const sub = await Subscription.findOne({ subscriptionCode, isDeleted: false }).populate('package')
+    const sub = await Subscription.findOne({
+      subscriptionCode,
+      isDeleted: false,
+    }).populate('package')
     if (!sub) {
       throw new AppError(
         httpStatus.NOT_FOUND,
@@ -108,7 +112,11 @@ export const enablePaystackSubscription = async (
       )
     }
 
-    const user = await User.findOne({ _id: sub.user, status: USER_STATUS.active, isDeleted: false })
+    const user = await User.findOne({
+      _id: sub.user,
+      status: USER_STATUS.active,
+      isDeleted: false,
+    })
     if (!user) {
       throw new AppError(
         httpStatus.NOT_FOUND,
@@ -117,8 +125,7 @@ export const enablePaystackSubscription = async (
     }
 
     // Check if subscription is expired
-    const isExpired =
-      sub.expiredAt && sub.expiredAt < new Date()
+    const isExpired = sub.expiredAt && sub.expiredAt < new Date()
     if (isExpired) {
       // If expired or cancelled, initiate a new payment to reactivate
       const pkg = sub.package as TPackage
@@ -178,8 +185,9 @@ export const enablePaystackSubscription = async (
           { new: true },
         )
 
-        const user = await User.findById(sub.user).select('fcmToken')
+        const user = await User.findById(sub.user)
         if (user && user?.fcmToken) {
+          if (!canSendNotification(user, 'subscription')) return
           // Create a notification entry
           const notifyPayload = {
             receiver: sub.user,
@@ -255,7 +263,7 @@ export const subscriptionNotifyToUser = async (
   subscription: TSubscriptions,
   user: TUser,
 ) => {
-  if (!user || !user?.fcmToken) return
+  if (!canSendNotification(user, 'subscription')) return
 
   // Determine the message and description based on the action
   let message

@@ -7,6 +7,8 @@ export type TRefund = {
   receiver: Types.ObjectId | string
   authority: TRefundAuthority
   order: Types.ObjectId | string
+  paymentIntentId: string
+  amount: number
   reason: string
   status: TRefundStatus
   processedAt: Date
