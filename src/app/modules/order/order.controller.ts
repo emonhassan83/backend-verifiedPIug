@@ -71,7 +71,8 @@ const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
 const changeStatus = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.changeStatusFromDB(
     req.params.id,
-    req.body
+    req.body,
+    req.user._id
   )
 
   sendResponse(res, {

@@ -408,7 +408,7 @@ const confirmPayment = async (query: Record<string, any>) => {
       if (attempt === maxRetries) {
         if (verifiedPaymentId) {
           try {
-            await refundPaystackPayment(verifiedPaymentId)
+            await refundPaystackPayment(verifiedPaymentId, paymentId.amount, 'Refund Request')
           } catch (refundError: any) {
             console.error('Refund failed:', refundError.message)
           }
@@ -512,14 +512,15 @@ const refundPayment = async (payload: any) => {
     // Send refund request to Paystack
     const refundResponse = await refundPaystackPayment(
       Number(paymentData.paymentIntentId),
+      booking.totalAmount,
+      payload.reason,
     )
-
-    if (!refundResponse?.status) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Refund initiation failed at Paystack',
-      )
-    }
+    if (!refundResponse.success) {
+        if (refundResponse.alreadyRefunded) {
+          throw new AppError(httpStatus.BAD_REQUEST, 'Transaction already fully refunded');
+        }
+        throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Paystack refund failed');
+      }
 
     // Update booking and payment status
     await Order.findByIdAndUpdate(
@@ -544,7 +545,7 @@ const refundPayment = async (payload: any) => {
     await session.commitTransaction()
     session.endSession()
 
-    return refundResponse.data
+    return refundResponse
   } catch (error: any) {
     await session.abortTransaction()
     session.endSession()
