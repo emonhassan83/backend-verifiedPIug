@@ -6,7 +6,9 @@ export type TWithdraw = {
   user: Types.ObjectId
   method: TWithdrawMethod
   amount: number
-  playstackId?: string
+  paystackTransferId?: string
+  recipientCode?: string
+  note: string
   status: TWithdrawStatus
   createdAt?: Date
 }

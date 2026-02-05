@@ -4,7 +4,6 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { TWithdraw } from './withdraw.interface'
 import { Withdraw } from './withdraw.model'
 import { User } from '../user/user.model'
-// @ts-ignore
 // import StripeService from '../../class/stripe/stripe'
 
 const createWithdrawIntoDB = async (payload: TWithdraw) => {

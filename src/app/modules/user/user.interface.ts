@@ -38,7 +38,6 @@ export interface TUser {
   }
   status: TUserStatus
   packageExpiry?: Date
-  playstackId?: string
   avgRating: number
   ratingCount: number
   balance: number

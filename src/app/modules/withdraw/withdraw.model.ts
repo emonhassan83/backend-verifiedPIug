@@ -8,10 +8,12 @@ const withdrawSchema = new Schema<TWithdraw>(
     method: {
       type: String,
       enum: Object.values(WITHDRAW_METHOD),
-      required: true,
+      default: WITHDRAW_METHOD.playstack,
     },
     amount: { type: Number, required: true },
-    playstackId: { type: String },
+    paystackTransferId: { type: String, default: null },
+    recipientCode: { type: String, required: true },
+    note: { type: String },
     status: {
       type: String,
       enum: Object.values(WITHDRAW_STATUS),
