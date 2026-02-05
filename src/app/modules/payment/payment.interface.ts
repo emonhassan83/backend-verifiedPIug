@@ -16,6 +16,7 @@ export type TPayment = {
   transactionId: string
   paymentIntentId: string
   amount: number
+  refundAmount: number
   status: TPaymentStatus
   isPaid: boolean
   isDeleted: boolean

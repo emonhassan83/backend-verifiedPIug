@@ -675,38 +675,53 @@ export const verifyPaystackTransaction = async (reference: string) => {
 
 export const refundPaystackPayment = async (
   transactionId: number,
+  refundAmount: number,
   customerNote?: string,
 ) => {
   try {
+    console.log(`Initiating refund for transaction ${transactionId} | amount: ${refundAmount}`);
+
     const response = await axios.post(
       'https://api.paystack.co/refund',
       {
         transaction: transactionId,
-        customer_note:
-          customerNote || `Refund for transaction ${transactionId}`,
-        merchant_note:
-          customerNote || `Refund for transaction ${transactionId}`,
+        amount: refundAmount * 100,
+        customer_note: customerNote || `Partial refund of ${refundAmount}`,
+        merchant_note: customerNote || `Partial refund processed by admin`,
       },
       {
         headers: {
           Authorization: `Bearer ${config.paystack.secret_key}`,
           'Content-Type': 'application/json',
         },
-      },
-    )
+      }
+    );
 
-    return response.data
+    console.log('Paystack refund response:', response.data);
+
+    if (response.data.status) {
+      return {
+        success: true,
+        refundId: response.data.data.id,
+        amountRefunded: response.data.data.amount / 100,
+        message: 'Refund processed successfully',
+      };
+    } else {
+      throw new AppError(httpStatus.BAD_REQUEST, response.data.message || 'Refund failed');
+    }
   } catch (error: any) {
-    const message =
-      error?.response?.data?.message || 'Paystack refund request failed'
-    if (message === 'Transaction has been fully reversed') {
+    const message = error?.response?.data?.message || 'Paystack refund request failed';
+    console.error('Refund error:', message);
+
+    if (message.includes('already been fully reversed')) {
       return {
         success: false,
         alreadyRefunded: true,
         message,
-      }
+      };
     }
-    throw new Error(message)
+
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, message);
   }
 }
 

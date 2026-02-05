@@ -9,7 +9,11 @@ import {
   changeOrderStatusNotification,
   sendNewOrderNotification,
 } from './order.utils'
-import { ORDER_STATUS } from './order.constants'
+import { ORDER_STATUS, TOrderStatus } from './order.constants'
+import { Refund } from '../refund/refund.model'
+import { REFUND_STATUS } from '../refund/refund.constant'
+import { Payment } from '../payment/payment.model'
+import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -158,12 +162,31 @@ const updateAIntoDB = async (id: string, payload: Partial<TOrder>) => {
   return result
 }
 
-const changeStatusFromDB = async (id: string, payload: any) => {
-  const { status } = payload
+const changeStatusFromDB = async (
+  id: string,
+  payload: { status: TOrderStatus; reason?: string },
+  userId: string,
+) => {
+  const { status, reason } = payload
+
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+  }
 
   const order = await Order.findById(id)
   if (!order || order?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+  }
+
+  // 🔐 Authorization
+  const isAuthorized =
+    order.sender.toString() === userId || order.receiver.toString() === userId
+  if (!isAuthorized) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not allowed to change this order status',
+    )
   }
 
   // if set canalled then must be order status running
@@ -174,19 +197,51 @@ const changeStatusFromDB = async (id: string, payload: any) => {
         `Order cannot be cancelled. Current status is "${order.status}". Cancellation is only allowed when status is "running".`,
       )
     }
+
+    // Check for existing refund request for same order
+    const existing = await Refund.findOne({
+      order: id,
+      user: userId,
+      status: { $in: [REFUND_STATUS.pending] },
+    })
+    if (existing) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'Refund request already submitted for this order',
+      )
+    }
+    // Find payment info (for amount and paymentIntentId)
+    const payment = await Payment.findOne({
+      user: userId,
+      modelType: PAYMENT_MODEL_TYPE.Order,
+      reference: order._id,
+      isPaid: true,
+      isDeleted: false,
+    })
+    if (!payment) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'No valid payment found for this order!',
+      )
+    }
+
+    // Create refund request automatically
+    await Refund.create({
+      user: userId,
+      order: order._id,
+      paymentIntentId: payment.paymentIntentId,
+      amount: 0, // appropriate amount calculation in admin then set price
+      reason: reason || 'User canceled order',
+      status: REFUND_STATUS.pending,
+    })
   }
 
-  const result = await Order.findByIdAndUpdate(
+  // Update order status
+  const updatedOrder = await Order.findByIdAndUpdate(
     order._id,
     { status },
     { new: true },
   )
-  if (!result) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'User not found and failed to update status!',
-    )
-  }
 
   // Status change notification to BOTH sender and receiver
   await changeOrderStatusNotification(
@@ -194,10 +249,10 @@ const changeStatusFromDB = async (id: string, payload: any) => {
     order.receiver as Types.ObjectId,
     order,
     status,
-    "bookings"
+    'bookings',
   )
 
-  return result
+  return updatedOrder
 }
 
 // Delete Order

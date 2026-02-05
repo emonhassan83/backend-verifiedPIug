@@ -20,6 +20,7 @@ export interface TOrder {
   initialAmount: number;           // amount to be paid to start
   pendingAmount: number;           // remaining after initial payment
   finalAmount: number;             // final amount due on completion (can be same as pending or adjusted)
+  refundAmount: number;             // final amount due on completion (can be same as pending or adjusted)
 
   initialPayment: {
     amountPaid: number;

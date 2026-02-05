@@ -7,41 +7,17 @@ import { RefundValidation } from './refund.validation'
 
 const router = express.Router()
 
-router.post(
-  '/',
-  auth(USER_ROLE.user, USER_ROLE.planer),
-  zodValidationRequest(RefundValidation.createValidationSchema),
-  RefundControllers.createRefund,
-)
-
 router.patch(
   '/status/:id',
-  auth(USER_ROLE.vendor, USER_ROLE.planer),
+  auth(USER_ROLE.admin),
+  zodValidationRequest(RefundValidation.updateValidationSchema),
   RefundControllers.changeRefundStatus,
 )
 
-router.delete('/:id', auth(USER_ROLE.user, USER_ROLE.planer), RefundControllers.deleteARefund)
+router.delete('/:id', auth(USER_ROLE.admin), RefundControllers.deleteARefund)
 
-router.get(
-  '/sender-refunds',
-  auth(USER_ROLE.user, USER_ROLE.planer),
-  RefundControllers.getSenderRefunds,
-)
+router.get('/', auth(USER_ROLE.admin), RefundControllers.getAllRefunds)
 
-router.get(
-  '/receiver-refunds',
-  auth(USER_ROLE.vendor, USER_ROLE.planer),
-  RefundControllers.getReceiverRefunds,
-)
-
-router.get(
-  '/:id',
-  auth(
-    USER_ROLE.planer,
-    USER_ROLE.vendor,
-    USER_ROLE.user,
-  ),
-  RefundControllers.getARefund,
-)
+router.get('/:id', auth(USER_ROLE.admin), RefundControllers.getARefund)
 
 export const RefundRoutes = router

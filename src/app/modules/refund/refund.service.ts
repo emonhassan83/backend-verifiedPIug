@@ -1,91 +1,24 @@
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { TRefund } from './refund.interface'
 import { Refund } from './refund.model'
 import { User } from '../user/user.model'
-import {
-  refundAddNotifyToVendor,
-  refundChangeStatusNotifyToUser,
-} from './refund.utils'
+import { refundChangeStatusNotifyToUser } from './refund.utils'
 import { Order } from '../order/order.models'
 import { ORDER_STATUS, PAYMENT_STATUS } from '../order/order.constants'
-import {
-  REFUND_AUTHORITY,
-  REFUND_STATUS,
-  TRefundStatus,
-} from './refund.constant'
+import { REFUND_STATUS, TRefundStatus } from './refund.constant'
 import { startSession } from 'mongoose'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
-import { PAYMENT_TYPE } from '../payment/payment.constant'
 import { refundPaystackPayment } from '../payment/payment.utils'
 import { Project } from '../project/project.models'
 import { PROJECT_STATUS } from '../project/project.constants'
-
-const createRefundIntoDB = async (payload: TRefund, userId: string) => {
-  const { order: orderId } = payload
-
-  // 1. Find the order
-  const order = await Order.findById(orderId)
-  if (!order || order?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
-  }
-  if (order.status !== ORDER_STATUS.cancelled) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      'Only cancelled order eligible for refund!',
-    )
-  }
-
-  // 2. Validate requesting user
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found!')
-  }
-
-  // 3. Get vendor’s balance
-  const receiver = await User.findById(order.sender)
-  if (!receiver || receiver?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Refound receiver not found!')
-  }
-
-  // 3.5. prevent duplicate refund
-  const isExistRefund = await Refund.findOne({
-    sender: userId,
-    receiver: order.sender,
-    status: REFUND_STATUS.pending,
-  })
-  if (isExistRefund) return isExistRefund
-
-  // 4. Prepare and create refund
-  const refundPayload: TRefund = {
-    ...payload,
-    authority: user.role as any,
-    sender: userId,
-    receiver: order.sender,
-  }
-
-  const refund = await Refund.create(refundPayload)
-  if (!refund) {
-    throw new AppError(httpStatus.CONFLICT, 'Refund request not created!')
-  }
-
-  // 5. Notify Receiver
-  await refundAddNotifyToVendor('ADDED', user, receiver, refund, 'bookings')
-
-  return refund
-}
 
 const getAllRefundsFromDB = async (query: Record<string, unknown>) => {
   const refundQuery = new QueryBuilder(
     Refund.find().populate([
       {
-        path: 'sender',
-        select: 'name photoUrl',
-      },
-      {
-        path: 'receiver',
+        path: 'user',
         select: 'name photoUrl',
       },
       {
@@ -114,18 +47,14 @@ const getARefundFromDB = async (id: string) => {
   // Step 1: Get the refund with related data
   const refund = await Refund.findById(id).populate([
     {
-      path: 'sender',
-      select: 'name photoUrl',
-    },
-    {
-      path: 'receiver',
+      path: 'user',
       select: 'name photoUrl',
     },
     {
       path: 'order',
     },
   ])
-  if (!refund || refund?.isDeleted) {
+  if (!refund) {
     throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found')
   }
 
@@ -134,138 +63,151 @@ const getARefundFromDB = async (id: string) => {
 
 const updateRefundStatusFromDB = async (
   id: string,
-  payload: { status: TRefundStatus },
+  payload: { status: TRefundStatus; amount?: number; note: string },
 ) => {
-  const { status } = payload;
+  const { status, amount = 0, note } = payload
 
   // 1. Validate status
   if (!Object.values(REFUND_STATUS).includes(status)) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund status');
+    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund status')
   }
 
   // 2. Start transaction
-  const session = await startSession();
-  session.startTransaction();
+  const session = await startSession()
+  session.startTransaction()
 
   try {
     // 3. Find refund request
-    const refund = await Refund.findById(id).session(session);
-    if (!refund || refund.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found!');
+    const refund = await Refund.findById(id).session(session)
+    if (!refund) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found!')
     }
 
     // 4. Prevent invalid transitions
     if (refund.status !== REFUND_STATUS.pending) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        `Refund request already ${refund.status}. Cannot change status again.`
-      );
+        `Refund request already ${refund.status}. Cannot change status again.`,
+      )
     }
 
-    // 6. If authority = "user" and status = "confirmed" → auto refund via Paystack
-    if (
-      refund.authority === REFUND_AUTHORITY.user &&
-      status === REFUND_STATUS.confirmed
-    ) {
+    // 5. Use payment amount if amount is not provided
+    const refundAmount = amount || refund.amount
+    if (refundAmount <= 0 || refundAmount > refund.amount) {
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund amount')
+    }
+
+    // 6. If authority = "user" and status = "approved" → auto refund via Paystack
+    if (status === REFUND_STATUS.approved) {
       // Find linked payment
       const payment = await Payment.findOne({
         reference: refund.order,
-        user: refund.sender,
         modelType: PAYMENT_MODEL_TYPE.Order,
-        type: PAYMENT_TYPE.initial,
         isPaid: true,
         isDeleted: false,
-      }).session(session);
-
-      if (!payment || !payment.transactionId) {
+      }).session(session)
+      if (!payment || !payment.paymentIntentId) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'No payment found for this order to refund'
-        );
+          'No payment found for this order to refund',
+        )
       }
 
       // Paystack-এ refund করো
       const refundResponse = await refundPaystackPayment(
         Number(payment.paymentIntentId),
-        `Refund requested by user for order ${refund.order}`
-      );
-
-      if (!refundResponse?.status) {
+        refundAmount,
+        `Refund requested by user for order ${refund.order}`,
+      )
+      if (!refundResponse.success) {
+        if (refundResponse.alreadyRefunded) {
+          throw new AppError(
+            httpStatus.BAD_REQUEST,
+            'Transaction already fully refunded',
+          )
+        }
         throw new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
-          'Paystack refund failed'
-        );
+          'Paystack refund failed',
+        )
       }
 
       // Update payment status to refunded
-      await Payment.findOneAndUpdate(
-        { _id: payment._id },
-        { status: PAYMENT_STATUS.refunded },
-        { session }
-      );
+      await Payment.findByIdAndUpdate(
+        payment._id,
+        {
+          $inc: { refundedAmount: refundAmount },
+          status: PAYMENT_STATUS.refunded,
+        },
+        { session },
+      )
 
       // Update order refund fields
       await Order.findByIdAndUpdate(
         refund.order,
         {
-          initialAmount: 0,
-          pendingAmount: 0,
-          status: ORDER_STATUS.refunded,
-          initialPayment: {
-            status: PAYMENT_STATUS.refunded,
-          },
+          refundAmount: refundAmount,
+          status: ORDER_STATUS.refunded
         },
-        { session }
-      );
+        { session },
+      )
 
-      // Fix: Project received update 
-     await Project.findOneAndUpdate(
+      // Project received update
+      await Project.findOneAndUpdate(
         { order: refund.order },
         {
-          $inc: { received: -payment.amount }, // শুধু subtract করো
+          $inc: { received: -refundAmount }, // শুধু subtract করো
           status: PROJECT_STATUS.refunded,
         },
-        { session, new: true }
-      );
+        { session, new: true },
+      )
     }
 
     // 7. Update refund status
     const updatedRefund = await Refund.findByIdAndUpdate(
       id,
       {
-        status,
+        status: REFUND_STATUS.approved,
         processedAt: new Date(),
+        note,
       },
-      { new: true, session }
-    );
-
+      { new: true, session },
+    )
     if (!updatedRefund) {
-      throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Refund update failed');
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Refund update failed',
+      )
     }
 
     // 8. Notify user
-    const user = await User.findById(refund.sender).session(session);
+    const user = await User.findById(refund.user).session(session)
     if (user) {
-      await refundChangeStatusNotifyToUser('CHANGED_STATUS', user, updatedRefund, 'bookings');
+      await refundChangeStatusNotifyToUser(
+        'CHANGED_STATUS',
+        user,
+        updatedRefund,
+        note,
+      )
     }
 
-    await session.commitTransaction();
-    session.endSession();
+    await session.commitTransaction()
+    session.endSession()
 
-    return updatedRefund;
+    return updatedRefund
   } catch (error: any) {
-    await session.abortTransaction();
-    session.endSession();
+    await session.abortTransaction()
+    session.endSession()
     throw new AppError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      error.message || 'Failed to update refund status'
-    );
+      error.message || 'Failed to update refund status',
+    )
   }
-};
+}
 
 const deleteARefundFromDB = async (id: string) => {
   const refund = await Refund.findById(id)
-  if (!refund || refund?.isDeleted) {
+  if (!refund) {
     throw new AppError(
       httpStatus.FORBIDDEN,
       'This Refund request is not found !',
@@ -278,13 +220,7 @@ const deleteARefundFromDB = async (id: string) => {
     )
   }
 
-  const result = await Refund.findByIdAndUpdate(
-    id,
-    {
-      isDeleted: true,
-    },
-    { new: true },
-  )
+  const result = await Refund.findByIdAndDelete(id)
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Refund request Delete failed!')
   }
@@ -293,7 +229,6 @@ const deleteARefundFromDB = async (id: string) => {
 }
 
 export const RefundServices = {
-  createRefundIntoDB,
   getAllRefundsFromDB,
   getARefundFromDB,
   updateRefundStatusFromDB,

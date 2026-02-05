@@ -13,9 +13,8 @@ export const refundAddNotifyToVendor = async (
   user: TUser,
   vendor: TUser,
   refund: TRefund,
-  category: TNotifyCategory,
 ) => {
-  if (!canSendNotification(user, category)) return
+  if (!canSendNotification(user, 'payment')) return
 
   // Determine the message and description based on the action
   let message
@@ -46,9 +45,9 @@ export const refundChangeStatusNotifyToUser = async (
   action: 'CHANGED_STATUS',
   user: TUser,
   refund: TRefund,
-  category: TNotifyCategory,
+  note: string,
 ) => {
-  if (!canSendNotification(user, category)) return
+  if (!canSendNotification(user, 'payment')) return
 
   // Determine the message and description based on the action
   let message
@@ -67,7 +66,7 @@ export const refundChangeStatusNotifyToUser = async (
   const notifyPayload = {
     receiver: user?._id,
     message,
-    description,
+    description: note ? note : description,
     reference: refund?._id,
     model_type: modeType.Refund,
   }

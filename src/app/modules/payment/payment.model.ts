@@ -28,6 +28,7 @@ const paymentSchema = new Schema<TPayment>(
     },
     transactionId: { type: String, unique: true },
     amount: { type: Number, min: 0 },
+    refundAmount: { type: Number, default: 0 },
     status: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),

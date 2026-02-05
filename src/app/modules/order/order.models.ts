@@ -70,6 +70,10 @@ const orderSchema = new Schema<TOrder>(
       type: Number,
       default: 0,
     },
+    refundAmount: {
+      type: Number,
+      default: 0,
+    },
 
     initialPayment: paymentSubSchema,
     finalPayment: paymentSubSchema,
