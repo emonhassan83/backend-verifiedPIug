@@ -27,8 +27,13 @@ export const messages = {
   },
 
   refund: {
-    addRequest: 'Refound request added !',
-    changedStatus: 'Refound request added !',
+    addRequest: 'Refund request added !',
+    changedStatus: 'Refund status changed !',
+  },
+
+  withdraw: {
+    addRequest: 'Withdraw request added !',
+    changedStatus: 'Withdraw status changed !',
   },
 
   subscription: {

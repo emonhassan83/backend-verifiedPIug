@@ -10,6 +10,7 @@ export enum modeType {
   Refund = 'Refund',
   Subscription = 'Subscription',
   Payment = 'Payment',
+  Withdraw = 'Withdraw',
   KYC = 'KYC',
 }
 
