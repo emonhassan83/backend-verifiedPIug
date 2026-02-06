@@ -27,6 +27,7 @@ import { PaymentRoutes } from '../modules/payment/payment.route'
 import { uploadRouter } from '../modules/uploads/route'
 import { RefundRoutes } from '../modules/refund/refund.route'
 import { ParticipantRoutes } from '../modules/participant/participant.route'
+import { PaystackRecipientRoutes } from '../modules/paystackRecipient/paystackRecipient.route'
 
 const router = Router()
 
@@ -130,6 +131,10 @@ const moduleRoutes = [
   {
     path: '/payments',
     route: PaymentRoutes,
+  },
+  {
+    path: '/paystack-recipients',
+    route: PaystackRecipientRoutes,
   },
   {
     path: '/withdraw',
