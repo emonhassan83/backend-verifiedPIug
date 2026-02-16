@@ -45,7 +45,6 @@ const registerUser = catchAsync(async (req, res) => {
 })
 
 const getAllUsers = catchAsync(async (req, res) => {
-  req.query.role = USER_ROLE.user
   const result = await UserService.getAllUsersFromDB(req.query)
 
   sendResponse(res, {
