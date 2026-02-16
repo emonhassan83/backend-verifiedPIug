@@ -28,6 +28,7 @@ import { uploadRouter } from '../modules/uploads/route'
 import { RefundRoutes } from '../modules/refund/refund.route'
 import { ParticipantRoutes } from '../modules/participant/participant.route'
 import { PaystackRecipientRoutes } from '../modules/paystackRecipient/paystackRecipient.route'
+import { MetaRoutes } from '../modules/meta/meta.route'
 
 const router = Router()
 
@@ -147,6 +148,10 @@ const moduleRoutes = [
   {
     path: '/notifications',
     route: NotificationRoutes,
+  },
+  {
+    path: '/meta',
+    route: MetaRoutes,
   },
 ]
 
