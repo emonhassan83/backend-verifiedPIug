@@ -88,11 +88,16 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
   }
 
   // 6. Payment logic: initialAmount = 50% of totalAmount
-  if (totalAmount) {
+  if (totalAmount && sender.role === USER_ROLE.planer) {
     payload.initialAmount = Number(totalAmount) / 2
     payload.pendingAmount = Number(totalAmount) - payload.initialAmount
     payload.finalAmount = payload.pendingAmount // initially same as pending
-  } else {
+  } else if (totalAmount && sender.role === USER_ROLE.vendor) {
+    payload.initialAmount = 0
+    payload.pendingAmount = Number(totalAmount)
+    payload.finalAmount = Number(totalAmount)
+  }
+  else {
     throw new AppError(httpStatus.BAD_REQUEST, 'Total amount is required')
   }
 
