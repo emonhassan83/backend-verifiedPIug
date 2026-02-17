@@ -29,15 +29,27 @@ router.put(
 )
 
 router.get(
-  '/client-orders',
+  '/author/my-client-orders',
   auth(USER_ROLE.planer, USER_ROLE.user),
   OrderController.myClientOrders,
 )
 
 router.get(
-  '/vendor-orders',
+  '/client-orders',
+  auth(USER_ROLE.admin),
+  OrderController.allClientOrders,
+)
+
+router.get(
+  '/author/my-vendor-orders',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   OrderController.myVendorOrders,
+)
+
+router.get(
+  '/vendor-orders',
+  auth(USER_ROLE.admin),
+  OrderController.allVendorOrders,
 )
 
 router.get(

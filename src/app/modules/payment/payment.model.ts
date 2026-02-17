@@ -21,6 +21,7 @@ const paymentSchema = new Schema<TPayment>(
       default: PAYMENT_TYPE.full,
     },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    author: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     reference: {
       type: Schema.Types.ObjectId,
       refPath: 'modelType',
@@ -29,6 +30,8 @@ const paymentSchema = new Schema<TPayment>(
     transactionId: { type: String, unique: true },
     amount: { type: Number, min: 0 },
     refundAmount: { type: Number, default: 0 },
+    platformEarning: { type: Number, default: 0 },
+    authorEarning: { type: Number, default: 0 },
     status: {
       type: String,
       enum: Object.values(PAYMENT_STATUS),

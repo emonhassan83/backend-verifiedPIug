@@ -25,131 +25,168 @@ import { Order } from '../order/order.models'
 import { ORDER_STATUS } from '../order/order.constants'
 import { Project } from '../project/project.models'
 import { PROJECT_STATUS } from '../project/project.constants'
-import { PARTICIPANT_ROLE, PARTICIPANT_STATUS } from '../participant/participant.constants'
+import {
+  PARTICIPANT_ROLE,
+  PARTICIPANT_STATUS,
+} from '../participant/participant.constants'
 import { Participant } from '../participant/participant.models'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
 
 const checkout = async (payload: TPayment) => {
-  const transactionId = generateTransactionId()
-  const { modelType, user: userId, reference, type } = payload
+  const transactionId = generateTransactionId();
+  const { modelType, user: userId, reference, type } = payload;
 
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
-  }
+  const session = await startSession();
+  session.startTransaction();
 
-  let order: TOrder | null = null
-  let subscription: TSubscriptions | null = null
-
-  // Fetch model
-  if (modelType === PAYMENT_MODEL_TYPE.Order) {
-    order = await Order.findById(reference)
-    if (!order) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!')
-    }
-  } else if (modelType === PAYMENT_MODEL_TYPE.Subscription) {
-    subscription = await Subscription.findById(reference).populate('package')
-    if (!subscription) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!')
-    }
-  } else {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type')
-  }
-
-  // ── NEW LOGIC: Prevent duplicate payment for completed steps ──
-  if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
-    if (type === 'initial' && order.initialPayCompleted) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Initial payment for this order is already completed.',
-      )
+  try {
+    const user = await User.findById(userId).session(session);
+    if (!user || user?.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
     }
 
-    if (type === 'final' && order.finalPayCompleted) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'Final payment for this order is already completed.',
-      )
-    }
+    let order: TOrder | null = null;
+    let subscription: TSubscriptions | null = null;
 
-    // Also check if total is already fully paid
-    if (order.isFullyPaid) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This order is already fully paid.',
-      )
-    }
-  }
+    // Fetch model
+    if (modelType === PAYMENT_MODEL_TYPE.Order) {
+      order = await Order.findById(reference).session(session);
+      if (!order) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!');
+      }
 
-  // Check for existing unpaid payment of same type
-  let paymentData = await Payment.findOne({
-    reference,
-    user: userId,
-    type,
-    isPaid: false,
-  })
-
-  if (paymentData) {
-    // Reuse existing unpaid payment (update transactionId)
-    paymentData = await Payment.findByIdAndUpdate(
-      paymentData._id,
-      { transactionId },
-      { new: true },
-    )
-  } else {
-    // Create new payment
-    payload.transactionId = transactionId
-
-    // Set correct amount based on payment type
-    if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
-      payload.amount =
-        type === 'initial' ? order.initialAmount : order.pendingAmount
+      // Set author (receiver = vendor/planner who will earn)
+      payload.author = order.receiver;
+    } else if (modelType === PAYMENT_MODEL_TYPE.Subscription) {
+      subscription = await Subscription.findById(reference)
+        .populate('package')
+        .session(session);
+      if (!subscription) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!');
+      }
     } else {
-      // @ts-ignore
-      payload.amount = subscription?.amount
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type');
     }
 
-    paymentData = await Payment.create(payload)
+    // ── Prevent duplicate payment for completed steps ──
+    if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
+      if (type === 'initial' && order.initialPayCompleted) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Initial payment for this order is already completed.'
+        );
+      }
+
+      if (type === 'final' && order.finalPayCompleted) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Final payment for this order is already completed.'
+        );
+      }
+
+      if (order.isFullyPaid) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'This order is already fully paid.');
+      }
+    }
+
+    // Check for existing unpaid payment of same type
+    let paymentData = await Payment.findOne({
+      reference,
+      user: userId,
+      type,
+      isPaid: false,
+    }).session(session);
+
+    let finalAmount: number;
+
+    if (paymentData) {
+      // Reuse existing unpaid payment
+      paymentData = await Payment.findByIdAndUpdate(
+        paymentData._id,
+        { transactionId },
+        { new: true, session }
+      );
+      finalAmount = paymentData!.amount;
+    } else {
+      // Create new payment
+      payload.transactionId = transactionId;
+
+      // Set correct amount based on payment type
+      if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
+        finalAmount =
+          type === 'initial' ? order.initialAmount : order.pendingAmount;
+      } else {
+        // @ts-ignore
+        finalAmount = subscription?.amount;
+      }
+
+      payload.amount = finalAmount;
+
+      // ── COMMISSION LOGIC ── only for Order payments
+      let platformEarning = 0;
+      let authorEarning = finalAmount;
+
+      if (modelType === PAYMENT_MODEL_TYPE.Order) {
+        const PLATFORM_COMMISSION_RATE = 0.03; // 3%
+        platformEarning = Math.round(finalAmount * PLATFORM_COMMISSION_RATE);
+        authorEarning = finalAmount - platformEarning;
+      }
+
+      payload.platformEarning = platformEarning;
+      payload.authorEarning = authorEarning;
+
+      // Create payment
+      const createdPayments = await Payment.create([payload], { session });
+      paymentData = createdPayments[0];
+
+      if (!paymentData) {
+        throw new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to create payment'
+        );
+      }
+    }
+
+    // Handle Subscription checkout
+    if (subscription) {
+      const checkoutUrl = await createPaystackSubscriptionCheckout({
+        userId,
+        packageId: reference,
+        paymentId: paymentData!._id,
+      });
+
+      await session.commitTransaction();
+      return checkoutUrl;
+    }
+
+    // Handle Order checkout
+    if (order) {
+      const checkoutSessionUrl = await createPaystackCheckoutSession({
+        product: {
+          amount: paymentData!.amount,
+          name: `Order ${type === 'initial' ? 'Initial' : 'Final'} Payment - ${order.title}`,
+          quantity: 1,
+        },
+        customer: {
+          name: user?.name || '',
+          email: user?.email || '',
+        },
+        paymentId: paymentData!._id,
+      });
+
+      await session.commitTransaction();
+      return checkoutSessionUrl;
+    }
+
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Unexpected model type');
+  } catch (error: any) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  if (!paymentData) {
-    throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to create/update payment',
-    )
-  }
-
-  // Handle Subscription checkout
-  if (subscription) {
-    return await createPaystackSubscriptionCheckout({
-      userId,
-      packageId: reference,
-      paymentId: paymentData._id,
-    })
-  }
-
-  // Handle Order checkout
-  if (order) {
-    const checkoutSessionUrl = await createPaystackCheckoutSession({
-      product: {
-        amount: paymentData.amount,
-        name: `Order ${type === 'initial' ? 'Initial' : 'Final'} Payment - ${order.title}`,
-        quantity: 1,
-      },
-      customer: {
-        name: user?.name || '',
-        email: user?.email || '',
-      },
-      paymentId: paymentData._id,
-    })
-
-    return checkoutSessionUrl
-  }
-
-  // Fallback
-  throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Unexpected model type')
-}
+};
 
 const confirmPayment = async (query: Record<string, any>) => {
   const { reference, paymentId } = query
@@ -168,7 +205,7 @@ const confirmPayment = async (query: Record<string, any>) => {
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
       }
 
-      let verification
+      let verification;
       if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         verification = await verifyPaystackSubscription(reference)
       } else {
@@ -363,6 +400,26 @@ const confirmPayment = async (query: Record<string, any>) => {
         await Order.findByIdAndUpdate(payment.reference, updateFields, {
           session,
         })
+
+        // ── NEW: Transfer authorEarning to author's balance ──
+        if (payment.author) {
+          const author = await User.findById(payment.author).session(session);
+          if (author) {
+            await User.findByIdAndUpdate(
+              payment.author,
+              {
+                $inc: { balance: payment.authorEarning },
+              },
+              { session }
+            );
+
+            console.log(
+              `Transferred ₦${payment.authorEarning} to author ${payment.author} balance`
+            );
+          } else {
+            console.warn(`Author ${payment.author} not found for payment ${paymentId}`);
+          }
+        }
       } else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         // Your existing subscription logic...
         const subscription = await Subscription.findById(
@@ -408,7 +465,11 @@ const confirmPayment = async (query: Record<string, any>) => {
       if (attempt === maxRetries) {
         if (verifiedPaymentId) {
           try {
-            await refundPaystackPayment(verifiedPaymentId, paymentId.amount, 'Refund Request')
+            await refundPaystackPayment(
+              verifiedPaymentId,
+              paymentId.amount,
+              'Refund Request',
+            )
           } catch (refundError: any) {
             console.error('Refund failed:', refundError.message)
           }
@@ -516,11 +577,17 @@ const refundPayment = async (payload: any) => {
       payload.reason,
     )
     if (!refundResponse.success) {
-        if (refundResponse.alreadyRefunded) {
-          throw new AppError(httpStatus.BAD_REQUEST, 'Transaction already fully refunded');
-        }
-        throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Paystack refund failed');
+      if (refundResponse.alreadyRefunded) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Transaction already fully refunded',
+        )
       }
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Paystack refund failed',
+      )
+    }
 
     // Update booking and payment status
     await Order.findByIdAndUpdate(

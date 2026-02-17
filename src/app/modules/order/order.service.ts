@@ -96,8 +96,7 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
     payload.initialAmount = 0
     payload.pendingAmount = Number(totalAmount)
     payload.finalAmount = Number(totalAmount)
-  }
-  else {
+  } else {
     throw new AppError(httpStatus.BAD_REQUEST, 'Total amount is required')
   }
 
@@ -117,7 +116,31 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
 }
 
 // Get all Order
-const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
+const getAllIntoDB = async (query: Record<string, any>) => {
+  const OrderModel = new QueryBuilder(
+    Order.find({
+      isDeleted: false,
+    }).populate([
+      { path: 'sender', select: 'name photoUrl address' },
+      { path: 'receiver', select: 'name photoUrl address' },
+    ]),
+    query,
+  )
+    .search(['title'])
+    .filter()
+    .paginate()
+    .sort()
+    .fields()
+
+  const data = await OrderModel.modelQuery
+  const meta = await OrderModel.countTotal()
+  return {
+    data,
+    meta,
+  }
+}
+
+const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
   const OrderModel = new QueryBuilder(
     Order.find({
       $or: [{ sender: userId }, { sender: userId }],
@@ -310,6 +333,7 @@ const deleteAIntoDB = async (id: string) => {
 export const OrderService = {
   insertIntoDB,
   getAllIntoDB,
+  getMyIntoDB,
   getAIntoDB,
   updateAIntoDB,
   changeStatusFromDB,

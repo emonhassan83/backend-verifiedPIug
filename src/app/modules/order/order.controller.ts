@@ -15,10 +15,23 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-// Get client order
+// Get client orders
+const allClientOrders = catchAsync(async (req: Request, res: Response) => {
+  req.query['authority'] = ORDER_AUTHORITY.client
+  const result = await OrderService.getAllIntoDB(req.query)
+  
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All client orders retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
 const myClientOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['authority'] = ORDER_AUTHORITY.client
-  const result = await OrderService.getAllIntoDB(req.query, req.user._id)
+  const result = await OrderService.getMyIntoDB(req.query, req.user._id)
   
   sendResponse(res, {
     statusCode: 200,
@@ -29,9 +42,23 @@ const myClientOrders = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+// Get client order
+const allVendorOrders = catchAsync(async (req: Request, res: Response) => {
+  req.query['authority'] = ORDER_AUTHORITY.vendor
+  const result = await OrderService.getAllIntoDB(req.query)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'All vendor orders retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
 const myVendorOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['authority'] = ORDER_AUTHORITY.vendor
-  const result = await OrderService.getAllIntoDB(req.query, req.user._id)
+  const result = await OrderService.getMyIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
@@ -99,6 +126,8 @@ const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
 export const OrderController = {
   insertIntoDB,
   myVendorOrders,
+  allClientOrders,
+  allVendorOrders,
   myClientOrders,
   getAIntoDB,
   updateAIntoDB,

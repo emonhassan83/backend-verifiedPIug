@@ -12,11 +12,14 @@ export type TPayment = {
   modelType: PAYMENT_MODEL_TYPE
   type: TPaymentType
   user: Types.ObjectId
+  author: Types.ObjectId
   reference: Types.ObjectId
   transactionId: string
   paymentIntentId: string
   amount: number
   refundAmount: number
+  platformEarning: number
+  authorEarning: number
   status: TPaymentStatus
   isPaid: boolean
   isDeleted: boolean
