@@ -140,8 +140,14 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
 // Get Order by ID
 const getAIntoDB = async (id: string) => {
   const result = await Order.findById(id).populate([
-    { path: 'sender', select: 'name photoUrl' },
-    { path: 'receiver', select: 'name photoUrl' },
+    {
+      path: 'sender',
+      select: 'name photoUrl email contractNumber address location locationUrl',
+    },
+    {
+      path: 'receiver',
+      select: 'name photoUrl email contractNumber address location locationUrl',
+    },
   ])
   if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Order not found')
