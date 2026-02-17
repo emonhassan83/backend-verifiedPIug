@@ -15,7 +15,7 @@ const adminMetaData = catchAsync(async (req, res) => {
 })
 
 const planerMetaData = catchAsync(async (req, res) => {
-  const result = await MetaService.adminMetaData(req.user._id, req.query)
+  const result = await MetaService.planerMetaData(req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -26,7 +26,7 @@ const planerMetaData = catchAsync(async (req, res) => {
 })
 
 const vendorMetaData = catchAsync(async (req, res) => {
-  const result = await MetaService.adminMetaData(req.user._id, req.query)
+  const result = await MetaService.vendorMetaData(req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
