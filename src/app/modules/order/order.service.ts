@@ -9,11 +9,12 @@ import {
   changeOrderStatusNotification,
   sendNewOrderNotification,
 } from './order.utils'
-import { ORDER_STATUS, TOrderStatus } from './order.constants'
+import { ORDER_AUTHORITY, ORDER_STATUS, TOrderStatus } from './order.constants'
 import { Refund } from '../refund/refund.model'
 import { REFUND_STATUS } from '../refund/refund.constant'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
+import { USER_ROLE } from '../user/user.constant'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -50,7 +51,11 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
   }
 
   // 3. Assign sender
-  payload.authority = sender.role as any
+  if (sender.role === USER_ROLE.planer) {
+    payload.authority = ORDER_AUTHORITY.client
+  } else if (sender.role === USER_ROLE.vendor) {
+    payload.authority = ORDER_AUTHORITY.vendor
+  }
   payload.sender = sender._id as Types.ObjectId
 
   // 4. Handle location
@@ -107,9 +112,12 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
 }
 
 // Get all Order
-const getAllIntoDB = async (query: Record<string, any>) => {
+const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   const OrderModel = new QueryBuilder(
-    Order.find({ isDeleted: false }).populate([
+    Order.find({
+      $or: [{ sender: userId }, { sender: userId }],
+      isDeleted: false,
+    }).populate([
       { path: 'sender', select: 'name photoUrl' },
       { path: 'receiver', select: 'name photoUrl' },
     ]),

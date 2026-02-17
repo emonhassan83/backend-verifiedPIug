@@ -15,7 +15,7 @@ export const PAYMENT_STATUS = {
 } as const
 
 export const ORDER_AUTHORITY = {
-  planer: 'planer',
+  client: 'client',
   vendor: 'vendor',
 } as const
 

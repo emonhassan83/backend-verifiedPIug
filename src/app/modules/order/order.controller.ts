@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import catchAsync from '../../utils/catchAsync'
 import { OrderService } from './order.service'
 import sendResponse from '../../utils/sendResponse'
+import { ORDER_AUTHORITY } from './order.constants'
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.insertIntoDB(req.user._id, req.body)
@@ -14,28 +15,28 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-// Get all Service
-const mySendOrders = catchAsync(async (req: Request, res: Response) => {
-  req.query['sender'] = req.user._id
-  const result = await OrderService.getAllIntoDB(req.query)
+// Get client order
+const myClientOrders = catchAsync(async (req: Request, res: Response) => {
+  req.query['authority'] = ORDER_AUTHORITY.client
+  const result = await OrderService.getAllIntoDB(req.query, req.user._id)
   
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'My send orders retrieved successfully',
+    message: 'Client orders retrieved successfully',
     meta: result.meta,
     data: result.data,
   })
 })
 
-const myReceiveOrders = catchAsync(async (req: Request, res: Response) => {
-  req.query['receiver'] = req.user._id
-  const result = await OrderService.getAllIntoDB(req.query)
+const myVendorOrders = catchAsync(async (req: Request, res: Response) => {
+  req.query['authority'] = ORDER_AUTHORITY.vendor
+  const result = await OrderService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'My receive orders retrieved successfully',
+    message: 'Vendor orders retrieved successfully',
     meta: result.meta,
     data: result.data,
   })
@@ -97,8 +98,8 @@ const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 export const OrderController = {
   insertIntoDB,
-  myReceiveOrders,
-  mySendOrders,
+  myVendorOrders,
+  myClientOrders,
   getAIntoDB,
   updateAIntoDB,
   changeStatus,

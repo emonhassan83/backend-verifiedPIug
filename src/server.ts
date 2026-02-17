@@ -20,6 +20,8 @@ async function main() {
     // default task added
     seeder.seedAdmin()
     seeder.seedContents()
+
+    // corn functionality
     startSubscriptionCron();
 
     server = app.listen(Number(config.port), config.ip as string, () => {

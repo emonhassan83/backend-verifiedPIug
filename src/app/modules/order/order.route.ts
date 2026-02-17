@@ -29,15 +29,15 @@ router.put(
 )
 
 router.get(
-  '/my-send-orders',
+  '/client-orders',
   auth(USER_ROLE.planer, USER_ROLE.user),
-  OrderController.mySendOrders,
+  OrderController.myClientOrders,
 )
 
 router.get(
-  '/my-receive-orders',
-  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
-  OrderController.myReceiveOrders,
+  '/vendor-orders',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  OrderController.myVendorOrders,
 )
 
 router.get(
