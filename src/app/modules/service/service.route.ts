@@ -54,7 +54,11 @@ router.get(
   auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   ServiceController.getUserServices,
 )
-router.get('/:id', auth(USER_ROLE.user), ServiceController.getAIntoDB)
+router.get(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  ServiceController.getAIntoDB,
+)
 
 router.get('/', auth(USER_ROLE.admin), ServiceController.getAllIntoDB)
 
