@@ -14,7 +14,17 @@ router.get(
 router.get(
   '/planer-revenue',
   auth(USER_ROLE.planer),
-  AnalysisController.planerAnalysisRevenue,
+  AnalysisController.planerRevenueAnalysis,
+)
+router.get(
+  '/planer-event',
+  auth(USER_ROLE.planer),
+  AnalysisController.planerEventAnalysis,
+)
+router.get(
+  '/planer-vendor',
+  auth(USER_ROLE.planer),
+  AnalysisController.planerVendorAnalysis,
 )
 
 router.get(

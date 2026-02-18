@@ -9,18 +9,40 @@ const adminAnalysisData = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Admin analysis data retrieval successfully!',
+    message: 'Admin analysis fetch successfully!',
     data: result,
   })
 })
 
-const planerAnalysisRevenue = catchAsync(async (req, res) => {
+const planerRevenueAnalysis = catchAsync(async (req, res) => {
   const result = await AnalysisService.planerAnalysisRevenue(req.user._id, req.query)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Planer analysis data retrieval successfully!',
+    message: 'Planer revenue fetch successfully!',
+    data: result,
+  })
+})
+
+const planerEventAnalysis = catchAsync(async (req, res) => {
+  const result = await AnalysisService.planerAnalysisEventType(req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Planer event analysis fetch successfully!',
+    data: result,
+  })
+})
+
+const planerVendorAnalysis = catchAsync(async (req, res) => {
+  const result = await AnalysisService.planerAnalysisTopVendor(req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Planer vendor analysis fetch successfully!',
     data: result,
   })
 })
@@ -31,13 +53,15 @@ const vendorAnalysisData = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,
-    message: 'Vendor analysis data retrieval successfully!',
+    message: 'Vendor analysis fetch successfully!',
     data: result,
   })
 })
 
 export const AnalysisController = {
   adminAnalysisData,
-  planerAnalysisRevenue,
+  planerRevenueAnalysis,
+  planerEventAnalysis,
+  planerVendorAnalysis,
   vendorAnalysisData
 }
