@@ -111,6 +111,21 @@ const changeStatus = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const cancelOrder = catchAsync(async (req: Request, res: Response) => {
+  const result = await OrderService.changeStatusFromDB(
+    req.params.id,
+    req.body,
+    req.user._id
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Order canceled successfully!',
+    data: result,
+  })
+})
+
 // Delete Service
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.deleteAIntoDB(req.params.id)
@@ -132,5 +147,6 @@ export const OrderController = {
   getAIntoDB,
   updateAIntoDB,
   changeStatus,
+  cancelOrder,
   deleteAIntoDB,
 }

@@ -204,12 +204,12 @@ const updateAIntoDB = async (id: string, payload: Partial<TOrder>) => {
   return result
 }
 
-const changeStatusFromDB = async (
+const cancelOrderFromDB = async (
   id: string,
-  payload: { status: TOrderStatus; reason?: string },
+  payload: { reason: string, note?: string },
   userId: string,
 ) => {
-  const { status, reason } = payload
+  const { reason, note } = payload
 
   const user = await User.findById(userId)
   if (!user || user?.isDeleted) {
@@ -227,12 +227,11 @@ const changeStatusFromDB = async (
   if (!isAuthorized) {
     throw new AppError(
       httpStatus.FORBIDDEN,
-      'You are not allowed to change this order status',
+      'You are not allowed to cancel this order',
     )
   }
 
   // if set canalled then must be order status running
-  if (status === ORDER_STATUS.cancelled) {
     if (order.status !== ORDER_STATUS.running) {
       throw new AppError(
         httpStatus.FORBIDDEN,
@@ -273,13 +272,59 @@ const changeStatusFromDB = async (
       order: order._id,
       paymentIntentId: payment.paymentIntentId,
       amount: 0, // appropriate amount calculation in admin then set price
-      reason: reason || 'User canceled order',
+      reason: reason,
+      note: note || 'User canceled order',
       status: REFUND_STATUS.pending,
     })
-  }
 
   // Update order status
   const updatedOrder = await Order.findByIdAndUpdate(
+    order._id,
+    { status: ORDER_STATUS.cancelled },
+    { new: true },
+  )
+
+  // Status change notification to BOTH sender and receiver
+  await changeOrderStatusNotification(
+    order.sender as Types.ObjectId,
+    order.receiver as Types.ObjectId,
+    order,
+    'cancelled',
+    'bookings',
+  )
+
+  return updatedOrder
+}
+
+const changeStatusFromDB = async (
+  id: string,
+  payload: { status: TOrderStatus },
+  userId: string,
+) => {
+  const { status } = payload
+
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+  }
+
+  const order = await Order.findById(id)
+  if (!order || order?.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+  }
+
+  // 🔐 Authorization
+  const isAuthorized =
+    order.sender.toString() === userId || order.receiver.toString() === userId
+  if (!isAuthorized) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not allowed to change this order status',
+    )
+  }
+
+  // Update order status
+  const result = await Order.findByIdAndUpdate(
     order._id,
     { status },
     { new: true },
@@ -294,7 +339,7 @@ const changeStatusFromDB = async (
     'bookings',
   )
 
-  return updatedOrder
+  return result
 }
 
 // Delete Order
@@ -336,6 +381,7 @@ export const OrderService = {
   getMyIntoDB,
   getAIntoDB,
   updateAIntoDB,
+  cancelOrderFromDB,
   changeStatusFromDB,
   deleteAIntoDB,
 }

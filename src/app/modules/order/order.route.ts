@@ -15,6 +15,13 @@ router.post(
 )
 
 router.patch(
+  '/canceled/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  zodValidationRequest(OrderValidation.cancelOrderValidationSchema),
+  OrderController.cancelOrder,
+)
+
+router.patch(
   '/status/:id',
   auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
   zodValidationRequest(OrderValidation.changeStatusValidationSchema),

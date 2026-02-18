@@ -8,6 +8,7 @@ export type TRefund = {
   paymentIntentId: string
   amount: number
   reason: string
+  note: string
   status: TRefundStatus
   processedAt: Date
 }

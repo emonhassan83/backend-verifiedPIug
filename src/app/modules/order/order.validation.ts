@@ -54,6 +54,17 @@ const changeStatusValidationSchema = z.object({
   }),
 })
 
+const cancelOrderValidationSchema = z.object({
+  body: z.object({
+    reason: z.string({
+      required_error: 'Order cancel reason is required',
+    }),
+    note: z.string({
+      required_error: 'Order cancel nate is required',
+    }),
+  }),
+})
+
 // Optional: Payment status update validation
 const paymentValidationSchema = z.object({
   body: z.object({
@@ -65,6 +76,7 @@ const paymentValidationSchema = z.object({
 export const OrderValidation = {
   createValidationSchema,
   updateValidationSchema,
+  cancelOrderValidationSchema,
   changeStatusValidationSchema,
   paymentValidationSchema,
 }

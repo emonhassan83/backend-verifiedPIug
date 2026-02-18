@@ -17,6 +17,7 @@ const refundSchema = new Schema<TRefund>(
     paymentIntentId: { type: String },
     amount: { type: Number, required: true, min: 0 },
     reason: { type: String, required: true },
+    note: { type: String, required: true },
     status: {
       type: String,
       enum: Object.values(REFUND_STATUS),
