@@ -58,8 +58,10 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
 
   const locationUrl = generateGoogleMapUrl(latitude, longitude)
 
+  // SET PAYLOAD
   payload.images = imageUrls
   payload.author = user._id
+  payload.authority = user.role as 'vendor' | 'planer'
 
   payload.locationUrl = locationUrl
   payload.location = {
@@ -78,7 +80,11 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
 // Get all Service
 const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   const ServiceModel = new QueryBuilder(
-    Service.find({ isDeleted: false }),
+    Service.find({ isDeleted: false })
+      .select('title images address locationUrl location author')
+      .populate([
+        { path: 'author', select: 'name photoUrl avgRating ratingCount' },
+      ]),
     query,
   )
     .search(['title'])
@@ -130,7 +136,14 @@ const getAllRecommendServices = async (
   }
 
   // 3️⃣ Query Builder (Search, Filter, Pagination)
-  const serviceQuery = new QueryBuilder(Service.find(baseQuery), query)
+  const serviceQuery = new QueryBuilder(
+    Service.find(baseQuery)
+      .select('title images address locationUrl location author')
+      .populate([
+        { path: 'author', select: 'name photoUrl avgRating ratingCount' },
+      ]),
+    query,
+  )
     .search(['title', 'subtitle'])
     .filter()
     .sort()

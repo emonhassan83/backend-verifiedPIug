@@ -1,9 +1,10 @@
 import { Model, Types } from 'mongoose'
-import { TPriceType, TServiceStatus } from './service.constants'
+import { TPriceType, TServiceAuthority, TServiceStatus } from './service.constants'
 
 export interface TService {
   _id?: string
   author: Types.ObjectId
+  authority: TServiceAuthority
   category: Types.ObjectId
   title: string
   subtitle: string

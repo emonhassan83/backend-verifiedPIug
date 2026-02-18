@@ -36,8 +36,20 @@ const vendorMetaData = catchAsync(async (req, res) => {
   })
 })
 
+const userMetaData = catchAsync(async (req, res) => {
+  const result = await MetaService.userMetaData(req.user._id)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'User meta data retrieval successfully!',
+    data: result,
+  })
+})
+
 export const MetaController = {
   adminMetaData,
   planerMetaData,
-  vendorMetaData
+  vendorMetaData,
+  userMetaData
 }

@@ -1,12 +1,21 @@
 import { Schema, model, Types } from 'mongoose'
 import { TService, TServiceModel } from './service.interface'
-import { PRICE_TYPE, SERVICE_STATUS } from './service.constants'
+import {
+  PRICE_TYPE,
+  SERVICE_AUTHORITY,
+  SERVICE_STATUS,
+} from './service.constants'
 
 const serviceSchema = new Schema<TService>(
   {
     author: {
       type: Schema.Types.ObjectId,
       ref: 'User',
+      required: true,
+    },
+    authority: {
+      type: String,
+      enum: Object.keys(SERVICE_AUTHORITY),
       required: true,
     },
     category: {
@@ -71,12 +80,9 @@ const serviceSchema = new Schema<TService>(
       default: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 )
 
 serviceSchema.index({ location: '2dsphere' })
 
-export const Service = model<TService, TServiceModel>(
-  'Service',
-  serviceSchema
-)
+export const Service = model<TService, TServiceModel>('Service', serviceSchema)
