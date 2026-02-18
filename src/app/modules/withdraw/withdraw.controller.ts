@@ -22,7 +22,7 @@ const getAllWithdraw = catchAsync(async (req, res) => {
     statusCode: 200,
     message: 'Withdraw retrieved successfully!',
     meta: result.meta,
-    data: result.result,
+    data: result.data,
   })
 })
 
@@ -35,7 +35,7 @@ const getAllMyWithdraw = catchAsync(async (req, res) => {
     statusCode: 200,
     message: 'My Withdraw retrieved successfully!',
     meta: result.meta,
-    data: result.result,
+    data: result.data.withdrawList,
   })
 })
 

@@ -1,3 +1,8 @@
+export const WITHDRAW_AUTHORITY = {
+  planer: 'planer',
+  vendor: 'vendor'
+} as const
+
 export const WITHDRAW_METHOD = {
   bank: 'bank',
   playstack: 'playstack'
@@ -10,5 +15,6 @@ export const WITHDRAW_STATUS = {
   paid: 'paid',
 } as const
 
+export type TWithdrawAuthority = keyof typeof WITHDRAW_AUTHORITY
 export type TWithdrawMethod = keyof typeof WITHDRAW_METHOD
 export type TWithdrawStatus = keyof typeof WITHDRAW_STATUS

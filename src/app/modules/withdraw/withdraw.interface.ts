@@ -1,9 +1,10 @@
 import { Model, Types } from 'mongoose'
-import { TWithdrawMethod, TWithdrawStatus } from './withdraw.constant'
+import { TWithdrawAuthority, TWithdrawMethod, TWithdrawStatus } from './withdraw.constant'
 
 export type TWithdraw = {
   _id?: string
   user: Types.ObjectId
+  authority: TWithdrawAuthority
   method: TWithdrawMethod
   amount: number
   paystackTransferId?: string

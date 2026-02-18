@@ -13,7 +13,10 @@ import {
   sendWithdrawalRequestNotify,
   sendWithdrawalStatusNotify,
 } from './withdraw.utils'
+import { Payment } from '../payment/payment.model'
+import { PAYMENT_STATUS } from '../payment/payment.constant'
 
+// 1. Send withdraw request
 const createWithdrawIntoDB = async (payload: TWithdraw) => {
   const session = await startSession()
   session.startTransaction()
@@ -89,6 +92,7 @@ const createWithdrawIntoDB = async (payload: TWithdraw) => {
       [
         {
           user: payload.user,
+          authority: user.role,
           amount: payload.amount,
           method: WITHDRAW_METHOD.playstack,
           status: WITHDRAW_STATUS.pending,
@@ -112,12 +116,60 @@ const createWithdrawIntoDB = async (payload: TWithdraw) => {
   }
 }
 
-// ২. Find admin for queries
+// 2. Find admin for queries
 const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
-  const WithdrawQuery = new QueryBuilder(
-    Withdraw.find().populate([
-      { path: 'user', select: 'name email photoUrl balance' },
-    ]),
+  // 1. totalRevenue: Sum of all paid amounts
+  const totalRevenueResult = await Payment.aggregate([
+    {
+      $match: {
+        status: PAYMENT_STATUS.paid,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: '$amount' },
+      },
+    },
+  ])
+  const totalRevenue = totalRevenueResult[0]?.totalRevenue || 0
+
+  // 2. commission: Sum of all platformEarning from paid payments
+  const commissionResult = await Payment.aggregate([
+    {
+      $match: {
+        status: PAYMENT_STATUS.paid,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        commission: { $sum: '$platformEarning' },
+      },
+    },
+  ])
+  const commission = commissionResult[0]?.commission || 0
+
+  // 3. pendingPayout: Sum of all pending withdrawal amounts
+  const pendingPayoutResult = await Withdraw.aggregate([
+    {
+      $match: {
+        status: WITHDRAW_STATUS.pending,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        pendingPayout: { $sum: '$amount' },
+      },
+    },
+  ])
+  const pendingPayout = pendingPayoutResult[0]?.pendingPayout || 0
+
+  const withdrawQuery = new QueryBuilder(
+    Withdraw.find().populate([{ path: 'user', select: 'name email photoUrl' }]),
     query,
   )
     .search([])
@@ -126,13 +178,21 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
     .paginate()
     .fields()
 
-  const result = await WithdrawQuery.modelQuery
-  const meta = await WithdrawQuery.countTotal()
+  const result = await withdrawQuery.modelQuery
+  const meta = await withdrawQuery.countTotal()
 
-  return { meta, result }
+  return {
+    meta,
+    data: {
+      totalRevenue,
+      commission,
+      pendingPayout,
+      withdrawList: result,
+    },
+  }
 }
 
-// ৩. For a withdraw request
+// 3. For a withdraw request
 const getAWithdrawFromDB = async (id: string) => {
   const result = await Withdraw.findById(id).populate([
     { path: 'user', select: 'name email photoUrl balance' },
@@ -145,7 +205,7 @@ const getAWithdrawFromDB = async (id: string) => {
   return result
 }
 
-// ৪. Admin withdraw request update
+// 4. Admin withdraw request update
 const updateWithdrawFromDB = async (
   id: string,
   payload: Partial<TWithdraw> & { processedBy: string },
@@ -254,7 +314,7 @@ const updateWithdrawFromDB = async (
   }
 }
 
-// ৫. Deleted functionality but not recommended
+// 5. Deleted functionality but not recommended
 const deleteAWithdrawFromDB = async (id: string) => {
   const withdraw = await Withdraw.findById(id)
   if (!withdraw) {

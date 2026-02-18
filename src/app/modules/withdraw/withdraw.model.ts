@@ -1,10 +1,15 @@
 import { Schema, model } from 'mongoose'
 import { TWithdraw, TWithdrawModel } from './withdraw.interface'
-import { WITHDRAW_METHOD, WITHDRAW_STATUS } from './withdraw.constant'
+import { WITHDRAW_AUTHORITY, WITHDRAW_METHOD, WITHDRAW_STATUS } from './withdraw.constant'
 
 const withdrawSchema = new Schema<TWithdraw>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    authority: {
+      type: String,
+      enum: Object.values(WITHDRAW_AUTHORITY),
+      required: true,
+    },
     method: {
       type: String,
       enum: Object.values(WITHDRAW_METHOD),

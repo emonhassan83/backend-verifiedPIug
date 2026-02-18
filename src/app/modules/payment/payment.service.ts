@@ -32,41 +32,43 @@ import {
 import { Participant } from '../participant/participant.models'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
+import { Withdraw } from '../withdraw/withdraw.model'
+import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 
 const checkout = async (payload: TPayment) => {
-  const transactionId = generateTransactionId();
-  const { modelType, user: userId, reference, type } = payload;
+  const transactionId = generateTransactionId()
+  const { modelType, user: userId, reference, type } = payload
 
-  const session = await startSession();
-  session.startTransaction();
+  const session = await startSession()
+  session.startTransaction()
 
   try {
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).session(session)
     if (!user || user?.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'User not found!');
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
-    let order: TOrder | null = null;
-    let subscription: TSubscriptions | null = null;
+    let order: TOrder | null = null
+    let subscription: TSubscriptions | null = null
 
     // Fetch model
     if (modelType === PAYMENT_MODEL_TYPE.Order) {
-      order = await Order.findById(reference).session(session);
+      order = await Order.findById(reference).session(session)
       if (!order) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!');
+        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!')
       }
 
       // Set author (receiver = vendor/planner who will earn)
-      payload.author = order.receiver;
+      payload.author = order.receiver
     } else if (modelType === PAYMENT_MODEL_TYPE.Subscription) {
       subscription = await Subscription.findById(reference)
         .populate('package')
-        .session(session);
+        .session(session)
       if (!subscription) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!');
+        throw new AppError(httpStatus.NOT_FOUND, 'Subscription Not Found!')
       }
     } else {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type')
     }
 
     // ── Prevent duplicate payment for completed steps ──
@@ -74,19 +76,22 @@ const checkout = async (payload: TPayment) => {
       if (type === 'initial' && order.initialPayCompleted) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Initial payment for this order is already completed.'
-        );
+          'Initial payment for this order is already completed.',
+        )
       }
 
       if (type === 'final' && order.finalPayCompleted) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Final payment for this order is already completed.'
-        );
+          'Final payment for this order is already completed.',
+        )
       }
 
       if (order.isFullyPaid) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'This order is already fully paid.');
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'This order is already fully paid.',
+        )
       }
     }
 
@@ -96,55 +101,55 @@ const checkout = async (payload: TPayment) => {
       user: userId,
       type,
       isPaid: false,
-    }).session(session);
+    }).session(session)
 
-    let finalAmount: number;
+    let finalAmount: number
 
     if (paymentData) {
       // Reuse existing unpaid payment
       paymentData = await Payment.findByIdAndUpdate(
         paymentData._id,
         { transactionId },
-        { new: true, session }
-      );
-      finalAmount = paymentData!.amount;
+        { new: true, session },
+      )
+      finalAmount = paymentData!.amount
     } else {
       // Create new payment
-      payload.transactionId = transactionId;
+      payload.transactionId = transactionId
 
       // Set correct amount based on payment type
       if (modelType === PAYMENT_MODEL_TYPE.Order && order) {
         finalAmount =
-          type === 'initial' ? order.initialAmount : order.pendingAmount;
+          type === 'initial' ? order.initialAmount : order.pendingAmount
       } else {
         // @ts-ignore
-        finalAmount = subscription?.amount;
+        finalAmount = subscription?.amount
       }
 
-      payload.amount = finalAmount;
+      payload.amount = finalAmount
 
       // ── COMMISSION LOGIC ── only for Order payments
-      let platformEarning = 0;
-      let authorEarning = finalAmount;
+      let platformEarning = 0
+      let authorEarning = finalAmount
 
       if (modelType === PAYMENT_MODEL_TYPE.Order) {
-        const PLATFORM_COMMISSION_RATE = 0.03; // 3%
-        platformEarning = Math.round(finalAmount * PLATFORM_COMMISSION_RATE);
-        authorEarning = finalAmount - platformEarning;
+        const PLATFORM_COMMISSION_RATE = 0.03 // 3%
+        platformEarning = Math.round(finalAmount * PLATFORM_COMMISSION_RATE)
+        authorEarning = finalAmount - platformEarning
       }
 
-      payload.platformEarning = platformEarning;
-      payload.authorEarning = authorEarning;
+      payload.platformEarning = platformEarning
+      payload.authorEarning = authorEarning
 
       // Create payment
-      const createdPayments = await Payment.create([payload], { session });
-      paymentData = createdPayments[0];
+      const createdPayments = await Payment.create([payload], { session })
+      paymentData = createdPayments[0]
 
       if (!paymentData) {
         throw new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
-          'Failed to create payment'
-        );
+          'Failed to create payment',
+        )
       }
     }
 
@@ -154,10 +159,10 @@ const checkout = async (payload: TPayment) => {
         userId,
         packageId: reference,
         paymentId: paymentData!._id,
-      });
+      })
 
-      await session.commitTransaction();
-      return checkoutUrl;
+      await session.commitTransaction()
+      return checkoutUrl
     }
 
     // Handle Order checkout
@@ -173,20 +178,23 @@ const checkout = async (payload: TPayment) => {
           email: user?.email || '',
         },
         paymentId: paymentData!._id,
-      });
+      })
 
-      await session.commitTransaction();
-      return checkoutSessionUrl;
+      await session.commitTransaction()
+      return checkoutSessionUrl
     }
 
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Unexpected model type');
+    throw new AppError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      'Unexpected model type',
+    )
   } catch (error: any) {
-    await session.abortTransaction();
-    throw error;
+    await session.abortTransaction()
+    throw error
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 const confirmPayment = async (query: Record<string, any>) => {
   const { reference, paymentId } = query
@@ -205,7 +213,7 @@ const confirmPayment = async (query: Record<string, any>) => {
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
       }
 
-      let verification;
+      let verification
       if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         verification = await verifyPaystackSubscription(reference)
       } else {
@@ -403,21 +411,23 @@ const confirmPayment = async (query: Record<string, any>) => {
 
         // ── NEW: Transfer authorEarning to author's balance ──
         if (payment.author) {
-          const author = await User.findById(payment.author).session(session);
+          const author = await User.findById(payment.author).session(session)
           if (author) {
             await User.findByIdAndUpdate(
               payment.author,
               {
                 $inc: { balance: payment.authorEarning },
               },
-              { session }
-            );
+              { session },
+            )
 
             console.log(
-              `Transferred ₦${payment.authorEarning} to author ${payment.author} balance`
-            );
+              `Transferred ₦${payment.authorEarning} to author ${payment.author} balance`,
+            )
           } else {
-            console.warn(`Author ${payment.author} not found for payment ${paymentId}`);
+            console.warn(
+              `Author ${payment.author} not found for payment ${paymentId}`,
+            )
           }
         }
       } else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
@@ -492,11 +502,61 @@ const handleWebhook = async (req: any) => {
 }
 
 const getAllPaymentsFromDB = async (query: Record<string, any>) => {
-  const reviewsModel = new QueryBuilder(
-    Payment.find().populate([
-      { path: 'reference', select: 'user status paymentStatus' },
-      { path: 'account', select: 'name email photoUrl contactNumber age' },
-    ]),
+  // 1. totalRevenue: Sum of all paid amounts
+  const totalRevenueResult = await Payment.aggregate([
+    {
+      $match: {
+        status: PAYMENT_STATUS.paid,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalRevenue: { $sum: '$amount' },
+      },
+    },
+  ])
+  const totalRevenue = totalRevenueResult[0]?.totalRevenue || 0
+
+  // 2. commission: Sum of all platformEarning from paid payments
+  const commissionResult = await Payment.aggregate([
+    {
+      $match: {
+        status: PAYMENT_STATUS.paid,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        commission: { $sum: '$platformEarning' },
+      },
+    },
+  ])
+  const commission = commissionResult[0]?.commission || 0
+
+  // 3. pendingPayout: Sum of all pending withdrawal amounts
+  const pendingPayoutResult = await Withdraw.aggregate([
+    {
+      $match: {
+        status: WITHDRAW_STATUS.pending,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        pendingPayout: { $sum: '$amount' },
+      },
+    },
+  ])
+  const pendingPayout = pendingPayoutResult[0]?.pendingPayout || 0
+
+  const paymentModel = new QueryBuilder(
+    Payment.find({
+      status: { $ne: PAYMENT_STATUS.unpaid },
+      isDeleted: false,
+    }).populate([{ path: 'user', select: 'name email photoUrl' }]),
     query,
   )
     .search([''])
@@ -505,12 +565,17 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
     .sort()
     .fields()
 
-  const data = await reviewsModel.modelQuery
-  const meta = await reviewsModel.countTotal()
+  const data = await paymentModel.modelQuery
+  const meta = await paymentModel.countTotal()
 
   return {
-    data,
     meta,
+    data: {
+      totalRevenue,
+      commission,
+      pendingPayout,
+      paymentList: data,
+    },
   }
 }
 
@@ -518,8 +583,8 @@ const getDashboardDataFromDB = async (query: Record<string, unknown>) => {}
 
 const getAPaymentsFromDB = async (id: string) => {
   const payment = await Payment.findById(id).populate([
-    { path: 'reference', select: 'user status paymentStatus' },
-    { path: 'user', select: 'name email photoUrl contactNumber' },
+    { path: 'reference' },
+    { path: 'user', select: 'name email photoUrl contactNumber address' },
   ])
   if (!payment) {
     throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
@@ -530,8 +595,8 @@ const getAPaymentsFromDB = async (id: string) => {
 
 const getAPaymentByReferenceIdFromDB = async (referenceId: string) => {
   const payment = await Payment.findOne({ reference: referenceId }).populate([
-    { path: 'reference', select: 'user status paymentStatus' },
-    { path: 'user', select: 'name email photoUrl contactNumber' },
+    { path: 'reference' },
+    { path: 'user', select: 'name email photoUrl contactNumber address' },
   ])
   if (!payment) {
     throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
