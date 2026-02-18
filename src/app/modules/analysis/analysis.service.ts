@@ -4,16 +4,18 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { User } from '../user/user.model'
 import { Payment } from '../payment/payment.model'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
-import { Project } from '../project/project.models'
-import { PROJECT_STATUS } from '../project/project.constants'
 import { Order } from '../order/order.models'
-import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
-import { Notification } from '../notification/notification.model'
-import mongoose from 'mongoose'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { Subscription } from '../subscription/subscription.models'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
-import { getEarningOverview, subscriptionEarning } from './analysis.utils'
+import {
+  authorOrderCountOverview,
+  getEarningOverview,
+  planerCommonMeta,
+  revenueGrowthOverview,
+  subscriptionEarning,
+  vendorOrderResult,
+} from './analysis.utils'
 
 const adminAnalysisData = async (
   userId: string,
@@ -164,13 +166,73 @@ const adminAnalysisData = async (
   }
 }
 
-const planerAnalysisData = async (userId: string) => {
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Planer not found!')
-  }
+const planerAnalysisRevenue = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  const { event_year, category_year, revenue_year } = query
 
-  
+  const selectedEventYear = event_year
+    ? parseInt(event_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const selectedCategoryYear = category_year
+    ? parseInt(category_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const selectedRevenueYear = revenue_year
+    ? parseInt(revenue_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const metaData = await planerCommonMeta(userId)
+  // 1. eventManagedOverview → Monthly count of events managed by planner
+  const eventManagedOverview = await authorOrderCountOverview(selectedEventYear, userId);
+
+  // 2. vendorCategoryOverview → Percentage of order types (vendor side)
+  const vendorOrderOverview = await vendorOrderResult(selectedCategoryYear, userId)
+
+  const vendorCategoryOverview = vendorOrderOverview.map(item => ({
+    type: item.type,
+    percentage: Math.round(item.percentage),
+  }));
+
+  // 3. revenueGrowthOverview → Monthly authorEarning breakdown
+  const revenueGrowth = await revenueGrowthOverview(selectedRevenueYear, userId)
+
+  return {
+    eventManaged: metaData.eventManaged,
+    activeClient: metaData.activeClient,
+    vendorPartnership: metaData.vendorPartnership,
+    totalEarning: metaData.totalEarning,
+    review: metaData.review,
+    eventManagedOverview,
+    vendorCategoryOverview,
+    revenueGrowthOverview: revenueGrowth,
+  };
+}
+
+const planerAnalysisEventType = async (userId: string) => {
+  const metaData = await planerCommonMeta(userId)
+
+  return {
+    eventManaged: metaData.eventManaged,
+    activeClient: metaData.activeClient,
+    vendorPartnership: metaData.vendorPartnership,
+    totalEarning: metaData.totalEarning,
+    review: metaData.review
+  };
+}
+
+const planerAnalysisTopVendor = async (userId: string) => {
+  const metaData = await planerCommonMeta(userId)
+
+  return {
+    eventManaged: metaData.eventManaged,
+    activeClient: metaData.activeClient,
+    vendorPartnership: metaData.vendorPartnership,
+    totalEarning: metaData.totalEarning,
+    review: metaData.review
+  };
 }
 
 const vendorAnalysisData = async (userId: string) => {
@@ -178,12 +240,12 @@ const vendorAnalysisData = async (userId: string) => {
   if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
     throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
   }
-
-
 }
 
 export const AnalysisService = {
   adminAnalysisData,
-  planerAnalysisData,
+  planerAnalysisRevenue,
+  planerAnalysisEventType,
+  planerAnalysisTopVendor,
   vendorAnalysisData,
 }

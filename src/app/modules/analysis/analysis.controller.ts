@@ -14,8 +14,8 @@ const adminAnalysisData = catchAsync(async (req, res) => {
   })
 })
 
-const planerAnalysisData = catchAsync(async (req, res) => {
-  const result = await AnalysisService.planerAnalysisData(req.user._id)
+const planerAnalysisRevenue = catchAsync(async (req, res) => {
+  const result = await AnalysisService.planerAnalysisRevenue(req.user._id, req.query)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -38,6 +38,6 @@ const vendorAnalysisData = catchAsync(async (req, res) => {
 
 export const AnalysisController = {
   adminAnalysisData,
-  planerAnalysisData,
+  planerAnalysisRevenue,
   vendorAnalysisData
 }

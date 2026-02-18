@@ -10,11 +10,13 @@ router.get(
   auth(USER_ROLE.admin),
   AnalysisController.adminAnalysisData,
 )
+
 router.get(
-  '/planer',
+  '/planer-revenue',
   auth(USER_ROLE.planer),
-  AnalysisController.planerAnalysisData,
+  AnalysisController.planerAnalysisRevenue,
 )
+
 router.get(
   '/vendor',
   auth(USER_ROLE.vendor),

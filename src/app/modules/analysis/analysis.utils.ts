@@ -1,8 +1,18 @@
+import mongoose from 'mongoose'
+import httpStatus from 'http-status'
 import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
 import { Order } from '../order/order.models'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 import { Payment } from '../payment/payment.model'
+import { User } from '../user/user.model'
+import { USER_ROLE } from '../user/user.constant'
+import AppError from '../../errors/AppError'
+
+const getYearRange = (year: number) => ({
+  $gte: new Date(`${year}-01-01`),
+  $lt: new Date(`${year + 1}-01-01`),
+})
 
 export const getEarningOverview = async (year: number) => {
   return await Order.aggregate([
@@ -163,5 +173,228 @@ export const bookingOverview = async (year: number) => {
       },
     },
     { $sort: { percentage: -1 } },
+  ])
+}
+
+export const planerCommonMeta = async (userId: string) => {
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Planer not found!')
+  }
+
+  // 1. eventManaged in planer
+  const eventManaged = await Order.countDocuments({
+    sender: userId,
+    authority: ORDER_AUTHORITY.client,
+    status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+    isDeleted: false,
+  })
+
+  // 2. activeClient
+  const activeClientResult = await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.client,
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$receiver',
+      },
+    },
+    {
+      $count: 'activeClients',
+    },
+  ])
+  const activeClient = activeClientResult[0]?.activeClients || 0
+
+  // 3. vendorPartnership count
+  const vendorPartnershipResult = await Order.aggregate([
+    {
+      $match: {
+        receiver: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$sender', // vendor ID
+      },
+    },
+    {
+      $count: 'vendorPartnerships',
+    },
+  ])
+  const vendorPartnership = vendorPartnershipResult[0]?.vendorPartnerships || 0
+
+  // 4. totalEarning → authorEarning from paid payments
+  const totalEarningResult = await Payment.aggregate([
+    {
+      $match: {
+        author: new mongoose.Types.ObjectId(userId),
+        status: PAYMENT_STATUS.paid,
+        isPaid: true,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$authorEarning' },
+      },
+    },
+  ])
+  const totalEarning = totalEarningResult[0]?.total || 0
+
+  // 5. review data (avgRating + ratingCount from user model)
+  const review = {
+    avgRating: user.avgRating || 0,
+    ratingCount: user.ratingCount || 0,
+  }
+
+  return {
+    eventManaged,
+    activeClient,
+    vendorPartnership,
+    totalEarning,
+    review,
+  }
+}
+
+export const authorOrderCountOverview = async (
+  year: number,
+  userId: string,
+) => {
+  return await Order.aggregate([
+    {
+      $match: {
+        receiver: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.client,
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+        createdAt: getYearRange(year),
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        month: {
+          $switch: {
+            branches: [
+              { case: { $eq: ['$_id', 1] }, then: 'January' },
+              { case: { $eq: ['$_id', 2] }, then: 'February' },
+              { case: { $eq: ['$_id', 3] }, then: 'March' },
+              { case: { $eq: ['$_id', 4] }, then: 'April' },
+              { case: { $eq: ['$_id', 5] }, then: 'May' },
+              { case: { $eq: ['$_id', 6] }, then: 'June' },
+              { case: { $eq: ['$_id', 7] }, then: 'July' },
+              { case: { $eq: ['$_id', 8] }, then: 'August' },
+              { case: { $eq: ['$_id', 9] }, then: 'September' },
+              { case: { $eq: ['$_id', 10] }, then: 'October' },
+              { case: { $eq: ['$_id', 11] }, then: 'November' },
+              { case: { $eq: ['$_id', 12] }, then: 'December' },
+            ],
+            default: 'Unknown',
+          },
+        },
+        count: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { _id: 1 } },
+  ])
+}
+
+export const vendorOrderResult = async (year: number, userId: string) => {
+  return await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+        createdAt: getYearRange(year),
+      },
+    },
+    {
+      $group: {
+        _id: '$type',
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$count' },
+        categories: { $push: { type: '$_id', count: '$count' } },
+      },
+    },
+    { $unwind: '$categories' },
+    {
+      $project: {
+        type: '$categories.type',
+        percentage: {
+          $multiply: [{ $divide: ['$categories.count', '$total'] }, 100],
+        },
+        _id: 0,
+      },
+    },
+    { $sort: { percentage: -1 } },
+  ])
+}
+
+export const revenueGrowthOverview = async (year: number, userId: string) => {
+  return await Payment.aggregate([
+    {
+      $match: {
+        author: new mongoose.Types.ObjectId(userId),
+        status: PAYMENT_STATUS.paid,
+        isPaid: true,
+        isDeleted: false,
+        createdAt: getYearRange(year),
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        amount: { $sum: '$authorEarning' },
+      },
+    },
+    {
+      $project: {
+        month: {
+          $switch: {
+            branches: [
+              { case: { $eq: ['$_id', 1] }, then: 'January' },
+              { case: { $eq: ['$_id', 2] }, then: 'February' },
+              { case: { $eq: ['$_id', 3] }, then: 'March' },
+              { case: { $eq: ['$_id', 4] }, then: 'April' },
+              { case: { $eq: ['$_id', 5] }, then: 'May' },
+              { case: { $eq: ['$_id', 6] }, then: 'June' },
+              { case: { $eq: ['$_id', 7] }, then: 'July' },
+              { case: { $eq: ['$_id', 8] }, then: 'August' },
+              { case: { $eq: ['$_id', 9] }, then: 'September' },
+              { case: { $eq: ['$_id', 10] }, then: 'October' },
+              { case: { $eq: ['$_id', 11] }, then: 'November' },
+              { case: { $eq: ['$_id', 12] }, then: 'December' },
+            ],
+            default: 'Unknown',
+          },
+        },
+        amount: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { _id: 1 } },
   ])
 }
