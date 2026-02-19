@@ -87,6 +87,20 @@ const getUserServices = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const getUserFeatures = catchAsync(async (req: Request, res: Response) => {
+  req.query.isFeatured = 'true';
+  req.query['author'] = req.params.userId
+  const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'User featured services retrieved successfully',
+    meta: result.meta,
+    data: result.data,
+  })
+})
+
 // Get Service by ID
 const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await ServiceService.getAIntoDB(req.params.id, req.user._id)
@@ -129,6 +143,20 @@ const changeStatus = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const changeFeaturedService = catchAsync(async (req: Request, res: Response) => {
+  const result = await ServiceService.changeFeaturedService(
+    req.params.id,
+    req.user._id
+  )
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result.message,
+    data: result,
+  })
+})
+
 // Delete Service
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await ServiceService.deleteAIntoDB(req.params.id)
@@ -147,9 +175,11 @@ export const ServiceController = {
   getActiveServices,
   getAllRecommendServices,
   getMyServices,
+  getUserFeatures,
   getUserServices,
   getAIntoDB,
   updateAIntoDB,
   changeStatus,
+  changeFeaturedService,
   deleteAIntoDB,
 }

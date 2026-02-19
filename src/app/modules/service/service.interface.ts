@@ -20,6 +20,7 @@ export interface TService {
   longitude: number
   price: number
   priceType: TPriceType
+  isFeatured: boolean
   status: TServiceStatus
   isDeleted?: boolean
 }

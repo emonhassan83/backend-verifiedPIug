@@ -27,6 +27,12 @@ router.patch(
   ServiceController.changeStatus,
 )
 
+router.patch(
+  '/featured/:id',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  ServiceController.changeFeaturedService,
+)
+
 router.put(
   '/:id',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
@@ -43,6 +49,13 @@ router.get(
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   ServiceController.getMyServices,
 )
+
+router.get(
+  '/featured/:userId',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  ServiceController.getUserFeatures,
+)
+
 router.get(
   '/recommend',
   auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),

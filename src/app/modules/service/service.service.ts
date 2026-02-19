@@ -6,12 +6,13 @@ import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { Category } from '../categories/categories.models'
-import { SERVICE_STATUS } from './service.constants'
+import { SERVICE_AUTHORITY, SERVICE_STATUS } from './service.constants'
 import {
   attachFavoriteFlag,
   sendServiceStatusNotifyToAuthor,
 } from './service.utils'
 import { Favorite } from '../favorite/favorite.model'
+import { USER_ROLE } from '../user/user.constant'
 
 const generateGoogleMapUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -128,6 +129,10 @@ const getAllRecommendServices = async (
   const baseQuery = {
     isDeleted: false,
     status: SERVICE_STATUS.active,
+    authority:
+      user.role === USER_ROLE.user
+        ? SERVICE_AUTHORITY.planer
+        : SERVICE_AUTHORITY.vendor,
     location: {
       $geoWithin: {
         $centerSphere: [[userLng, userLat], 5000 / 6378137],
@@ -296,6 +301,42 @@ const changeStatusFromDB = async (id: string, payload: any) => {
   return result
 }
 
+const changeFeaturedService = async (id: string, userId: string) => {
+  const service = await Service.findById(id).populate('author')
+  if (!service || service.isDeleted) {
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      'Service not found or has been deleted',
+    )
+  }
+
+  // service authority checked
+  if (service.author._id.toString() !== userId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not authorized to change featured status of this service',
+    )
+  }
+
+  // Toggle enabled
+  const newFeaturedStatus = !service.isFeatured
+  const updatedService = await Service.findByIdAndUpdate(
+    service._id,
+    { isFeatured: newFeaturedStatus },
+    { new: true, runValidators: true },
+  ).populate('author category')
+
+  // Dynamic message
+  const actionMessage = newFeaturedStatus
+    ? 'Service has been successfully marked as Featured'
+    : 'Service has been removed from Featured list'
+
+  return {
+    message: actionMessage,
+    data: updatedService,
+  }
+}
+
 // Delete Service
 const deleteAIntoDB = async (id: string) => {
   const result = await Service.findByIdAndUpdate(
@@ -329,5 +370,6 @@ export const ServiceService = {
   getAIntoDB,
   updateAIntoDB,
   changeStatusFromDB,
+  changeFeaturedService,
   deleteAIntoDB,
 }

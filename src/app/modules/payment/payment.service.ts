@@ -15,7 +15,7 @@ import {
 } from './payment.utils'
 import { generateTransactionId } from '../../utils/generateTransctionId'
 import mongoose, { startSession } from 'mongoose'
-import { PAYMENT_STATUS } from './payment.constant'
+import { PAYMENT_STATUS, PAYMENT_TYPE } from './payment.constant'
 import { TSubscriptions } from '../subscription/subscription.interface'
 import { Subscription } from '../subscription/subscription.models'
 import { User } from '../user/user.model'
@@ -34,6 +34,7 @@ import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 
 const checkout = async (payload: TPayment) => {
   const transactionId = generateTransactionId()
@@ -249,7 +250,7 @@ const confirmPayment = async (query: Record<string, any>) => {
         let updateFields: Partial<TOrder> = {}
 
         // Handle initial payment
-        if (payment.type === 'initial') {
+        if (payment.type === PAYMENT_TYPE.initial) {
           updateFields = {
             ...updateFields,
             initialPayment: {
@@ -299,24 +300,22 @@ const confirmPayment = async (query: Record<string, any>) => {
             )
           }
 
-          // =============================================
-          // AUTO CREATE / CHECK GROUP CHAT (duplicate-proof)
-          // =============================================
-          let groupChat = await Chat.findOne({
-            project: project._id,
-            type: CHAT_TYPE.group,
+          // ──────────────────────────────────────────────
+          // AUTO CREATE / CHECK ORDER CHAT (duplicate-proof)
+          // ──────────────────────────────────────────────
+          let orderChat = await Chat.findOne({
+            order: order._id,
+            type: CHAT_TYPE.order,
             isDeleted: false,
           }).session(session)
 
-          if (!groupChat) {
-            // Create new group chat
-            ;[groupChat] = await Chat.create(
+          if (!orderChat) {
+            ;[orderChat] = await Chat.create(
               [
                 {
-                  project: project._id,
-                  type: CHAT_TYPE.group,
-                  name: `${order.title} || ${order.finalAmount}`,
-                  image: null,
+                  order: order._id,
+                  type: CHAT_TYPE.order,
+                  name: `Order Chat - ${order.title}`,
                   status: CHAT_STATUS.active,
                   isDeleted: false,
                 },
@@ -324,24 +323,14 @@ const confirmPayment = async (query: Record<string, any>) => {
               { session },
             )
 
-            // =============================================
-            // Add participants (duplicate-proof)
-            // =============================================
-            const potentialParticipants = [
-              {
-                user: order.sender,
-                role: PARTICIPANT_ROLE.planer || PARTICIPANT_ROLE.user, // sender/client role
-              },
-              {
-                user: order.receiver,
-                role: PARTICIPANT_ROLE.vendor || PARTICIPANT_ROLE.user, // receiver/vendor role
-              },
+            // Add participants (planner & client)
+            const participants = [
+              { user: order.sender, role: PARTICIPANT_ROLE.planer },
+              { user: order.receiver, role: PARTICIPANT_ROLE.user },
             ]
 
-            // Existing participants prevent
             const existingParticipants = await Participant.find({
-              chat: groupChat._id,
-              user: { $in: [order.sender, order.receiver] },
+              chat: orderChat._id,
               isDeleted: false,
             }).session(session)
 
@@ -349,32 +338,73 @@ const confirmPayment = async (query: Record<string, any>) => {
               existingParticipants.map((p) => p.user.toString()),
             )
 
-            const newParticipants = potentialParticipants.filter(
+            const newParticipants = participants.filter(
               (p) => !existingUserIds.has(p.user.toString()),
             )
 
             if (newParticipants.length > 0) {
-              const participantDocs = newParticipants.map((p) => ({
-                chat: groupChat!._id,
-                user: p.user,
-                role: p.role,
-                status: PARTICIPANT_STATUS.active,
-              }))
-
-              await Participant.insertMany(participantDocs, { session })
+              await Participant.insertMany(
+                newParticipants.map((p) => ({
+                  chat: orderChat!._id,
+                  user: p.user,
+                  role: p.role,
+                  status: PARTICIPANT_STATUS.active,
+                })),
+                { session },
+              )
             }
+          }
 
-            console.log(
-              `Group chat created for project ${project._id} with ${newParticipants.length} new participants`,
+          // ──────────────────────────────────────────────
+          // AUTO CREATE / CHECK GROUP CHAT (duplicate-proof)
+          // ──────────────────────────────────────────────
+          let groupChat = await Chat.findOne({
+            project: project._id,
+            type: CHAT_TYPE.group,
+            isDeleted: false,
+          }).session(session)
+
+          if (!groupChat) {
+            ;[groupChat] = await Chat.create(
+              [
+                {
+                  project: project._id,
+                  type: CHAT_TYPE.group,
+                  name: `Project Group - ${order.title}`,
+                  status: CHAT_STATUS.active,
+                  isDeleted: false,
+                },
+              ],
+              { session },
             )
-          } else {
-            console.log(
-              `Group chat already exists for project ${project._id} — skipped creation`,
+
+            // Add initial participant (planner/author)
+            const existingGroupParticipants = await Participant.find({
+              chat: groupChat._id,
+              isDeleted: false,
+            }).session(session)
+
+            const existingGroupIds = new Set(
+              existingGroupParticipants.map((p) => p.user.toString()),
             )
+
+            if (!existingGroupIds.has(order.sender.toString())) {
+              await Participant.create(
+                [
+                  {
+                    chat: groupChat._id,
+                    user: order.sender,
+                    role: PARTICIPANT_ROLE.planer,
+                    status: PARTICIPANT_STATUS.active,
+                  },
+                ],
+                { session },
+              )
+            }
           }
         }
         // Handle final payment
-        else if (payment.type === 'final') {
+        else if (payment.type === PAYMENT_TYPE.final) {
           updateFields = {
             ...updateFields,
             finalPayment: {
@@ -431,7 +461,6 @@ const confirmPayment = async (query: Record<string, any>) => {
           }
         }
       } else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
-        // Your existing subscription logic...
         const subscription = await Subscription.findById(
           payment.reference,
         ).session(session)
@@ -439,26 +468,73 @@ const confirmPayment = async (query: Record<string, any>) => {
           throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
         }
 
+        // Update subscription
         await Subscription.findByIdAndUpdate(
           payment.reference,
           {
             transactionId: payment.transactionId,
             paymentStatus: PAYMENT_STATUS.paid,
-            status: 'confirmed',
+            status: SUBSCRIPTION_STATUS.active,
           },
           { new: true, session },
         )
 
+        // Update package popularity
         await Package.findByIdAndUpdate(
           subscription.package,
           { $inc: { popularity: 1 } },
           { session },
         )
 
+        // Subscription Management: Extend or Replace
+        const now = new Date()
+
+        const previousSubscription = await Subscription.findOne({
+          user: subscription.user,
+          _id: { $ne: subscription._id },
+          paymentStatus: PAYMENT_STATUS.paid,
+          status: SUBSCRIPTION_STATUS.active,
+        }).session(session)
+
+        if (previousSubscription) {
+          if (
+            previousSubscription.expiredAt &&
+            previousSubscription.expiredAt > now
+          ) {
+            // Extend existing subscription
+            if (subscription.expiredAt) {
+              previousSubscription.expiredAt = new Date(
+                previousSubscription.expiredAt.getTime() +
+                  (subscription.expiredAt.getTime() - now.getTime()),
+              )
+            }
+          } else {
+            // Replace expiry
+            if (subscription.expiredAt) {
+              previousSubscription.expiredAt = subscription.expiredAt
+            }
+            previousSubscription.isExpired = false
+          }
+
+          await previousSubscription.save({ session })
+
+          // Point payment to previous subscription and delete new one
+          await Payment.findByIdAndUpdate(
+            paymentId,
+            {
+              subscription: previousSubscription._id,
+            },
+            { session },
+          )
+
+          await Subscription.findByIdAndDelete(subscription._id, { session })
+        }
+
+        // Update user's package expiry
         const finalExpiryDate = subscription.expiredAt || new Date()
         await User.findByIdAndUpdate(
           payment.user,
-          { $set: { packageExpiry: finalExpiryDate } },
+          { packageExpiry: finalExpiryDate },
           { session },
         )
       }

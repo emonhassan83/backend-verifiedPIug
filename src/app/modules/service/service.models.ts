@@ -70,6 +70,10 @@ const serviceSchema = new Schema<TService>(
       enum: Object.values(PRICE_TYPE),
       required: true,
     },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+    },
     status: {
       type: String,
       enum: Object.values(SERVICE_STATUS),

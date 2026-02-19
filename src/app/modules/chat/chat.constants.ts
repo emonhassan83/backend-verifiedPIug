@@ -1,5 +1,6 @@
 export const CHAT_TYPE = {
   private: 'private',
+  order: 'order',
   group: 'group'
 } as const
 
