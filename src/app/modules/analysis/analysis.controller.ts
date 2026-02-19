@@ -48,7 +48,7 @@ const planerVendorAnalysis = catchAsync(async (req, res) => {
 })
 
 const vendorAnalysisData = catchAsync(async (req, res) => {
-  const result = await AnalysisService.vendorAnalysisData(req.user._id)
+  const result = await AnalysisService.vendorAnalysisData(req.user._id, req.query)
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

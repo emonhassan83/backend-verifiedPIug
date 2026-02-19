@@ -16,6 +16,9 @@ import {
   subscriptionEarning,
   vendorOrderResult,
 } from './analysis.utils'
+import mongoose from 'mongoose'
+import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
+import { Reviews } from '../review/review.models'
 
 const adminAnalysisData = async (
   userId: string,
@@ -186,15 +189,21 @@ const planerAnalysisRevenue = async (
 
   const metaData = await planerCommonMeta(userId)
   // 1. eventManagedOverview → Monthly count of events managed by planner
-  const eventManagedOverview = await authorOrderCountOverview(selectedEventYear, userId);
+  const eventManagedOverview = await authorOrderCountOverview(
+    selectedEventYear,
+    userId,
+  )
 
   // 2. vendorCategoryOverview → Percentage of order types (vendor side)
-  const vendorOrderOverview = await vendorOrderResult(selectedCategoryYear, userId)
+  const vendorOrderOverview = await vendorOrderResult(
+    selectedCategoryYear,
+    userId,
+  )
 
-  const vendorCategoryOverview = vendorOrderOverview.map(item => ({
+  const vendorCategoryOverview = vendorOrderOverview.map((item) => ({
     type: item.type,
     percentage: Math.round(item.percentage),
-  }));
+  }))
 
   // 3. revenueGrowthOverview → Monthly authorEarning breakdown
   const revenueGrowth = await revenueGrowthOverview(selectedRevenueYear, userId)
@@ -208,37 +217,355 @@ const planerAnalysisRevenue = async (
     eventManagedOverview,
     vendorCategoryOverview,
     revenueGrowthOverview: revenueGrowth,
-  };
+  }
 }
 
 const planerAnalysisEventType = async (userId: string) => {
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!')
+  }
+
+  // Get common metadata (eventManaged, activeClient, etc.)
   const metaData = await planerCommonMeta(userId)
+
+  // 1. eventAnalysis → type-wise breakdown of planner's orders (as receiver)
+  const eventAnalysisResult = await Order.aggregate([
+    {
+      $match: {
+        authority: ORDER_AUTHORITY.client,
+        receiver: new mongoose.Types.ObjectId(userId),
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$type', // order type
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$count' },
+        types: { $push: { type: '$_id', count: '$count' } },
+      },
+    },
+    { $unwind: '$types' },
+    {
+      $project: {
+        type: '$types.type',
+        count: '$types.count',
+        percentage: {
+          $multiply: [{ $divide: ['$types.count', '$total'] }, 100],
+        },
+        _id: 0,
+      },
+    },
+    { $sort: { count: -1 } }, // most frequent types first
+  ])
+
+  // Format the result (if no orders, return empty array)
+  const eventAnalysis = eventAnalysisResult.map((item) => ({
+    type: item.type || 'Unknown',
+    count: item.count,
+    percentage: Math.round(item.percentage || 0),
+  }))
 
   return {
     eventManaged: metaData.eventManaged,
     activeClient: metaData.activeClient,
     vendorPartnership: metaData.vendorPartnership,
     totalEarning: metaData.totalEarning,
-    review: metaData.review
-  };
+    review: metaData.review,
+    eventAnalysis,
+  }
 }
 
 const planerAnalysisTopVendor = async (userId: string) => {
   const metaData = await planerCommonMeta(userId)
 
+  // We are finding planners (receiver) where this vendor (sender) placed orders
+  const topVendorsResult = await Order.aggregate([
+    {
+      $match: {
+        receiver: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: '$sender', // vendor ID
+        orderCount: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'vendor',
+      },
+    },
+    { $unwind: '$vendor' },
+    {
+      $project: {
+        name: '$vendor.name',
+        orderCount: 1,
+        avgRating: '$vendor.avgRating',
+        _id: 0,
+      },
+    },
+    { $sort: { orderCount: -1 } }, // highest order count first
+    { $limit: 5 }, // top 5 vendors
+  ])
+
+  // Format the result (if no data, return empty array)
+  const topVendors = topVendorsResult.map((item) => ({
+    name: item.name || 'Unknown',
+    orderCount: item.orderCount,
+    avgRating: item.avgRating || 0,
+  }))
+
   return {
     eventManaged: metaData.eventManaged,
     activeClient: metaData.activeClient,
     vendorPartnership: metaData.vendorPartnership,
     totalEarning: metaData.totalEarning,
-    review: metaData.review
-  };
+    review: metaData.review,
+    topVendors,
+  }
 }
 
-const vendorAnalysisData = async (userId: string) => {
+const vendorAnalysisData = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  const { revenue_year, satisfaction_year, service_year, booking_year } = query
+
+  const totalBookingCount = await Order.countDocuments({
+    receiver: userId,
+    authority: ORDER_AUTHORITY.vendor,
+    status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+    isDeleted: false,
+  })
+
+  const totalEarningResult = await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        status: ORDER_STATUS.completed,
+        isDeleted: false,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalAmount: { $sum: '$totalAmount' },
+      },
+    },
+  ])
+
+  const totalAmountAllTime = totalEarningResult[0]?.totalAmount || 0
+  const totalEarningsAfterCommission = totalAmountAllTime * 0.97 // 3% commission deducted
+
+  // Selected years (default to current year)
+  const selectedRevenueYear = revenue_year
+    ? parseInt(revenue_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const selectedSatisfactionYear = satisfaction_year
+    ? parseInt(satisfaction_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const selectedServiceYear = service_year
+    ? parseInt(service_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
+  const selectedBookingYear = booking_year
+    ? parseInt(booking_year as string, 10) || new Date().getFullYear()
+    : new Date().getFullYear()
+
   const user = await User.findById(userId)
   if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
     throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
+  }
+
+  // ──────────────────────────────────────────────
+  // 1. monthlyRevenue: Revenue per month (completed orders)
+  // ──────────────────────────────────────────────
+  const monthlyRevenueAgg = await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        status: ORDER_STATUS.completed,
+        isDeleted: false,
+        actualEndDate: {
+          $gte: new Date(`${selectedRevenueYear}-01-01`),
+          $lt: new Date(`${selectedRevenueYear + 1}-01-01`),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$actualEndDate' },
+        amount: { $sum: '$totalAmount' },
+      },
+    },
+    {
+      $project: {
+        month: '$_id',
+        amount: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { month: 1 } },
+  ])
+
+  // Fill all 12 months with 0 if missing
+  const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
+    const rawAmount = monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0;
+    const afterCommission = Math.round(rawAmount * 0.97); // 3% commission deducted
+    return {
+      month: i + 1,
+      amount: afterCommission,
+    };
+  });
+
+  // ──────────────────────────────────────────────
+  // 2. clientSatisfaction: Monthly review count
+  // ──────────────────────────────────────────────
+  const clientSatisfactionAgg = await Reviews.aggregate([
+    {
+      $match: {
+        author: new mongoose.Types.ObjectId(userId),
+        createdAt: {
+          $gte: new Date(`${selectedSatisfactionYear}-01-01`),
+          $lt: new Date(`${selectedSatisfactionYear + 1}-01-01`),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        month: '$_id',
+        count: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { month: 1 } },
+  ])
+
+  const clientSatisfaction = Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    count: clientSatisfactionAgg.find((m) => m.month === i + 1)?.count || 0,
+  }))
+
+  // ──────────────────────────────────────────────
+  // 3. servicePopularity: Percentage by order type (all-time)
+  // ──────────────────────────────────────────────
+  const servicePopularityAgg = await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        isDeleted: false,
+        createdAt: {
+          $gte: new Date(`${selectedServiceYear}-01-01`),
+          $lt: new Date(`${selectedServiceYear + 1}-01-01`),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: '$type',
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$count' },
+        types: { $push: { type: '$_id', count: '$count' } },
+      },
+    },
+    {
+      $project: {
+        types: {
+          $map: {
+            input: '$types',
+            as: 't',
+            in: {
+              type: '$$t.type',
+              percentage: {
+                $round: [
+                  { $multiply: [{ $divide: ['$$t.count', '$total'] }, 100] },
+                  2,
+                ],
+              },
+            },
+          },
+        },
+      },
+    },
+  ])
+
+  const servicePopularity = servicePopularityAgg[0]?.types || []
+
+  // ──────────────────────────────────────────────
+  // 4. bookingTrends: Monthly booking count (orders received)
+  // ──────────────────────────────────────────────
+  const bookingTrendsAgg = await Order.aggregate([
+    {
+      $match: {
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.vendor,
+        isDeleted: false,
+        createdAt: {
+          $gte: new Date(`${selectedBookingYear}-01-01`),
+          $lt: new Date(`${selectedBookingYear + 1}-01-01`),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: { $month: '$createdAt' },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        month: '$_id',
+        count: 1,
+        _id: 0,
+      },
+    },
+    { $sort: { month: 1 } },
+  ])
+
+  const bookingTrends = Array.from({ length: 12 }, (_, i) => ({
+    month: i + 1,
+    count: bookingTrendsAgg.find((m) => m.month === i + 1)?.count || 0,
+  }))
+
+  return {
+    totalBookingCount,
+    totalEarnings: Math.round(totalEarningsAfterCommission),
+
+    monthlyRevenue,
+    clientSatisfaction,
+    servicePopularity,
+    bookingTrends,
   }
 }
 
