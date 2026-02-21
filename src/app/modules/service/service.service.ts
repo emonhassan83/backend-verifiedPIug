@@ -84,7 +84,7 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
     Service.find({ isDeleted: false })
       .select('title subtitle images address locationUrl location author')
       .populate([
-        { path: 'author', select: 'name photoUrl avgRating ratingCount' },
+        { path: 'author', select: 'name photoUrl categories avgRating ratingCount isKycVerified' },
       ]),
     query,
   )
@@ -145,7 +145,7 @@ const getAllRecommendServices = async (
     Service.find(baseQuery)
       .select('title subtitle images address locationUrl location author')
       .populate([
-        { path: 'author', select: 'name photoUrl avgRating ratingCount' },
+        { path: 'author', select: 'name photoUrl categories avgRating ratingCount isKycVerified' },
       ]),
     query,
   )
@@ -171,7 +171,7 @@ const getAIntoDB = async (id: string, userId: string) => {
   const result = await Service.findById(id).populate([
     {
       path: 'author',
-      select: 'name photoUrl bio address locationUrl avgRating ratingCount',
+      select: 'name photoUrl categories bio address locationUrl avgRating ratingCount isKycVerified',
     },
     { path: 'category', select: 'title' },
   ])

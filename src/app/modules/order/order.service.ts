@@ -121,8 +121,8 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     Order.find({
       isDeleted: false,
     }).populate([
-      { path: 'sender', select: 'name photoUrl address' },
-      { path: 'receiver', select: 'name photoUrl address' },
+      { path: 'sender', select: 'name photoUrl address isKycVerified' },
+      { path: 'receiver', select: 'name photoUrl address isKycVerified' },
     ]),
     query,
   )
@@ -143,11 +143,11 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
   const OrderModel = new QueryBuilder(
     Order.find({
-      $or: [{ sender: userId }, { sender: userId }],
+      $or: [{ sender: userId }, { receiver: userId }],
       isDeleted: false,
     }).populate([
-      { path: 'sender', select: 'name photoUrl' },
-      { path: 'receiver', select: 'name photoUrl' },
+      { path: 'sender', select: 'name photoUrl isKycVerified' },
+      { path: 'receiver', select: 'name photoUrl isKycVerified' },
     ]),
     query,
   )
@@ -170,11 +170,11 @@ const getAIntoDB = async (id: string) => {
   const result = await Order.findById(id).populate([
     {
       path: 'sender',
-      select: 'name photoUrl email contractNumber address location locationUrl',
+      select: 'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
     },
     {
       path: 'receiver',
-      select: 'name photoUrl email contractNumber address location locationUrl',
+      select: 'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
     },
   ])
   if (!result || result?.isDeleted) {
