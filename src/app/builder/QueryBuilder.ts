@@ -26,16 +26,20 @@ class QueryBuilder<T> {
   }
 
   filter() {
-    const queryObj = { ...this.query } // copy
+    const queryObj = { ...this.query };
 
-    // Filtering
-    const excludeFields = ['searchTerm', 'sort', 'limit', 'page', 'fields']
+    // Remove special query params
+    const excludeFields = ['searchTerm', 'sort', 'limit', 'page', 'fields'];
+    excludeFields.forEach((el) => delete queryObj[el]);
 
-    excludeFields.forEach((el) => delete queryObj[el])
+    // IMPORTANT: MERGE instead of REPLACE
+    // Only apply filter if there are actual filter fields left
+    if (Object.keys(queryObj).length > 0) {
+      // Use .find() with existing conditions preserved
+      this.modelQuery = this.modelQuery.find(queryObj as FilterQuery<T>);
+    }
 
-    this.modelQuery = this.modelQuery.find(queryObj as FilterQuery<T>)
-
-    return this
+    return this;
   }
 
   sort() {

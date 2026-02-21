@@ -19,7 +19,7 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
 const allClientOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['authority'] = ORDER_AUTHORITY.client
   const result = await OrderService.getAllIntoDB(req.query)
-  
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
@@ -31,18 +31,36 @@ const allClientOrders = catchAsync(async (req: Request, res: Response) => {
 
 const myClientOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['authority'] = ORDER_AUTHORITY.client
+  // Preserve searchTerm
+  const searchTerm = req.query.searchTerm
+  delete req.query.searchTerm // Prevent filter overwrite
+
   const result = await OrderService.getMyIntoDB(req.query, req.user._id)
-  
+
+  // Manual client-side filtering (fallback)
+  let filteredData = result.data
+
+  if (searchTerm) {
+    const regex = new RegExp(searchTerm as string, 'i')
+    filteredData = filteredData.filter((order: any) => regex.test(order.title))
+  }
+
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Client orders retrieved successfully',
-    meta: result.meta,
-    data: result.data,
+    meta: {
+      ...result.meta,
+      total: filteredData.length,
+      totalPage: Math.ceil(
+        filteredData.length / (Number(req.query.limit) || 10),
+      ),
+    },
+    data: filteredData,
   })
 })
 
-// Get client order
+// Get vendor orders
 const allVendorOrders = catchAsync(async (req: Request, res: Response) => {
   req.query['authority'] = ORDER_AUTHORITY.vendor
   const result = await OrderService.getAllIntoDB(req.query)
@@ -57,15 +75,34 @@ const allVendorOrders = catchAsync(async (req: Request, res: Response) => {
 })
 
 const myVendorOrders = catchAsync(async (req: Request, res: Response) => {
-  req.query['authority'] = ORDER_AUTHORITY.vendor
+  req.query.authority = ORDER_AUTHORITY.vendor
+
+  // Preserve searchTerm
+  const searchTerm = req.query.searchTerm
+  delete req.query.searchTerm // Prevent filter overwrite
+
   const result = await OrderService.getMyIntoDB(req.query, req.user._id)
+
+  // Manual client-side filtering (fallback)
+  let filteredData = result.data
+
+  if (searchTerm) {
+    const regex = new RegExp(searchTerm as string, 'i')
+    filteredData = filteredData.filter((order: any) => regex.test(order.title))
+  }
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Vendor orders retrieved successfully',
-    meta: result.meta,
-    data: result.data,
+    meta: {
+      ...result.meta,
+      total: filteredData.length,
+      totalPage: Math.ceil(
+        filteredData.length / (Number(req.query.limit) || 10),
+      ),
+    },
+    data: filteredData,
   })
 })
 
@@ -83,10 +120,7 @@ const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 // Update Service
 const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await OrderService.updateAIntoDB(
-    req.params.id,
-    req.body
-  )
+  const result = await OrderService.updateAIntoDB(req.params.id, req.body)
 
   sendResponse(res, {
     statusCode: 200,
@@ -100,7 +134,7 @@ const changeStatus = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.changeStatusFromDB(
     req.params.id,
     req.body,
-    req.user._id
+    req.user._id,
   )
 
   sendResponse(res, {
@@ -115,7 +149,7 @@ const cancelOrder = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.changeStatusFromDB(
     req.params.id,
     req.body,
-    req.user._id
+    req.user._id,
   )
 
   sendResponse(res, {

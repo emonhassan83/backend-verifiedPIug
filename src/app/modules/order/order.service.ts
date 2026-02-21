@@ -141,11 +141,13 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 }
 
 const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
+  const baseQuery = {
+    $or: [{ sender: userId }, { receiver: userId }],
+    isDeleted: false,
+  };
+  
   const OrderModel = new QueryBuilder(
-    Order.find({
-      $or: [{ sender: userId }, { receiver: userId }],
-      isDeleted: false,
-    }).populate([
+    Order.find(baseQuery).populate([
       { path: 'sender', select: 'name photoUrl isKycVerified' },
       { path: 'receiver', select: 'name photoUrl isKycVerified' },
     ]),
