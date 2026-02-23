@@ -4,7 +4,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Order } from './order.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
-import { Types } from 'mongoose'
+import mongoose, { Types } from 'mongoose'
 import {
   changeOrderStatusNotification,
   sendNewOrderNotification,
@@ -13,7 +13,6 @@ import { ORDER_AUTHORITY, ORDER_STATUS, TOrderStatus } from './order.constants'
 import { Refund } from '../refund/refund.model'
 import { REFUND_STATUS } from '../refund/refund.constant'
 import { Payment } from '../payment/payment.model'
-import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 import { USER_ROLE } from '../user/user.constant'
 
 const generateLocationUrl = (lat: number, lng: number) => {
@@ -144,8 +143,8 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
   const baseQuery = {
     $or: [{ sender: userId }, { receiver: userId }],
     isDeleted: false,
-  };
-  
+  }
+
   const OrderModel = new QueryBuilder(
     Order.find(baseQuery).populate([
       { path: 'sender', select: 'name photoUrl isKycVerified' },
@@ -172,11 +171,13 @@ const getAIntoDB = async (id: string) => {
   const result = await Order.findById(id).populate([
     {
       path: 'sender',
-      select: 'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
+      select:
+        'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
     },
     {
       path: 'receiver',
-      select: 'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
+      select:
+        'name photoUrl categories email contractNumber address location locationUrl avgRating ratingCount isKycVerified',
     },
   ])
   if (!result || result?.isDeleted) {
@@ -208,32 +209,38 @@ const updateAIntoDB = async (id: string, payload: Partial<TOrder>) => {
 
 const cancelOrderFromDB = async (
   id: string,
-  payload: { reason: string, note?: string },
+  payload: { reason: string; note?: string },
   userId: string,
 ) => {
   const { reason, note } = payload
 
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
-  }
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
-  const order = await Order.findById(id)
-  if (!order || order?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
-  }
+  try {
+    // 1. Find user
+    const user = await User.findById(userId).session(session)
+    if (!user || user.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
+    }
 
-  // 🔐 Authorization
-  const isAuthorized =
-    order.sender.toString() === userId || order.receiver.toString() === userId
-  if (!isAuthorized) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'You are not allowed to cancel this order',
-    )
-  }
+    // 2. Find order
+    const order = await Order.findById(id).session(session)
+    if (!order || order.isDeleted) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+    }
 
-  // if set canalled then must be order status running
+    // 3. Authorization
+    const isAuthorized =
+      order.sender.toString() === userId || order.receiver.toString() === userId
+    if (!isAuthorized) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'You are not allowed to cancel this order',
+      )
+    }
+
+    // 4. Strict status check
     if (order.status !== ORDER_STATUS.running) {
       throw new AppError(
         httpStatus.FORBIDDEN,
@@ -241,61 +248,85 @@ const cancelOrderFromDB = async (
       )
     }
 
-    // Check for existing refund request for same order
-    const existing = await Refund.findOne({
+    // 5. Check payment exists & is paid
+    const payment = await Payment.findOne({
+      reference: order._id,
+      modelType: 'Order',
+      isPaid: true,
+      isDeleted: false,
+    }).session(session)
+
+    if (!payment) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'No valid paid payment found for this order',
+      )
+    }
+
+    // 6. Prevent duplicate refund request
+    const existingRefund = await Refund.findOne({
       order: id,
       user: userId,
-      status: { $in: [REFUND_STATUS.pending] },
-    })
-    if (existing) {
+      status: REFUND_STATUS.pending,
+    }).session(session)
+
+    if (existingRefund) {
       throw new AppError(
         httpStatus.CONFLICT,
         'Refund request already submitted for this order',
       )
     }
-    // Find payment info (for amount and paymentIntentId)
-    const payment = await Payment.findOne({
-      user: userId,
-      modelType: PAYMENT_MODEL_TYPE.Order,
-      reference: order._id,
-      isPaid: true,
-      isDeleted: false,
-    })
-    if (!payment) {
+
+    // 7. Create refund request (amount from payment)
+    const refund = await Refund.create(
+      [
+        {
+          user: userId,
+          order: order._id,
+          paymentIntentId: payment.paymentIntentId,
+          amount: payment.amount, // full amount (adjust if partial refund needed)
+          reason,
+          note: note || 'User cancelled order',
+          status: REFUND_STATUS.pending,
+        },
+      ],
+      { session },
+    )
+
+    // 8. Update order status to cancelled
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id,
+      { status: ORDER_STATUS.cancelled },
+      { new: true, session },
+    )
+    if (!updatedOrder) {
       throw new AppError(
-        httpStatus.NOT_FOUND,
-        'No valid payment found for this order!',
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Failed to update order status',
       )
     }
 
-    // Create refund request automatically
-    await Refund.create({
-      user: userId,
-      order: order._id,
-      paymentIntentId: payment.paymentIntentId,
-      amount: 0, // appropriate amount calculation in admin then set price
-      reason: reason,
-      note: note || 'User canceled order',
-      status: REFUND_STATUS.pending,
-    })
+    // 9. Send status change notification to BOTH parties
+    await changeOrderStatusNotification(
+      order.sender,
+      order.receiver,
+      updatedOrder,
+      'cancelled',
+      'bookings',
+    )
 
-  // Update order status
-  const updatedOrder = await Order.findByIdAndUpdate(
-    order._id,
-    { status: ORDER_STATUS.cancelled },
-    { new: true },
-  )
+    // 10. Commit transaction
+    await session.commitTransaction()
 
-  // Status change notification to BOTH sender and receiver
-  await changeOrderStatusNotification(
-    order.sender as Types.ObjectId,
-    order.receiver as Types.ObjectId,
-    order,
-    'cancelled',
-    'bookings',
-  )
-
-  return updatedOrder
+    return updatedOrder
+  } catch (error) {
+    await session.abortTransaction()
+    throw error instanceof AppError
+      ? error
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to cancel order')
+  } finally {
+    session.endSession()
+  }
 }
 
 const changeStatusFromDB = async (
