@@ -51,6 +51,16 @@ const updateAIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const toggleTradingCategory = catchAsync(async (req: Request, res: Response) => {
+  const result = await CategoryService.toggleTradingCategory(req.params.id)
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: result?.isTreading ? 'Category marked as trending' : 'Category unmarked as trending',
+    data: result,
+  })
+})
 
 // Delete Category
 const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
@@ -69,5 +79,6 @@ export const CategoryController = {
   getAllIntoDB,
   getAIntoDB,
   updateAIntoDB,
+  toggleTradingCategory,
   deleteAIntoDB,
 }

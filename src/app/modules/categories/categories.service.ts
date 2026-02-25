@@ -93,6 +93,22 @@ const updateAIntoDB = async (
   return result
 }
 
+// Toggle Trading Category
+const toggleTradingCategory = async (id: string) => {
+  const category = await Category.findById(id)
+  if (!category) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
+  }
+
+  const updatedCategory = await Category.findByIdAndUpdate(
+    id,
+    { isTreading: !category.isTreading },
+    { new: true },
+  )
+
+  return updatedCategory
+}
+
 // Delete Category
 const deleteAIntoDB = async (id: string) => {
   const result = await Category.findByIdAndDelete(id)
@@ -108,5 +124,6 @@ export const CategoryService = {
   getAllIntoDB,
   getAIntoDB,
   updateAIntoDB,
+  toggleTradingCategory,
   deleteAIntoDB,
 }

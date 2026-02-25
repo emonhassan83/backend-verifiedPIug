@@ -5,6 +5,7 @@ export interface TCategory {
   title: string
   logo?: string
   listingCount?: number
+  isTreading?: boolean
   isDeleted?: boolean
 }
 

@@ -15,6 +15,10 @@ const categorySchema = new Schema<TCategory>(
       type: Number,
       default: 0,
     },
+    isTreading: {
+      type: Boolean,
+      default: false, 
+    },
   },
   {
     timestamps: true,

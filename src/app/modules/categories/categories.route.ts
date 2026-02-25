@@ -29,6 +29,12 @@ router.put(
   CategoryController.updateAIntoDB,
 )
 
+router.patch(
+  '/toggle-trading/:id',
+  auth(USER_ROLE.admin),
+  CategoryController.toggleTradingCategory,
+)
+
 router.get('/:id', CategoryController.getAIntoDB)
 
 router.get('/', CategoryController.getAllIntoDB)
