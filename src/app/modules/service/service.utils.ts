@@ -40,6 +40,7 @@ export const sendServiceStatusNotifyToAuthor = async (
   user: TUser,
   service: TService,
   category: TNotifyCategory,
+  reason?: string,
 ) => {
   if (!canSendNotification(user, category)) return
 
@@ -54,7 +55,7 @@ export const sendServiceStatusNotifyToAuthor = async (
 
     case SERVICE_STATUS.denied:
       message = messages.service.denied
-      description = `Your service "${service.title}" has been denied. Please review and resubmit.`
+      description = `Your service "${service.title}" has been denied. Reason: ${reason || 'No reason provided'}`
       break
   }
 

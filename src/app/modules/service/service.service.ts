@@ -6,7 +6,7 @@ import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { Category } from '../categories/categories.models'
-import { SERVICE_AUTHORITY, SERVICE_STATUS } from './service.constants'
+import { SERVICE_AUTHORITY, SERVICE_STATUS, TServiceStatus } from './service.constants'
 import {
   attachFavoriteFlag,
   sendServiceStatusNotifyToAuthor,
@@ -258,8 +258,8 @@ const updateAIntoDB = async (
   return result
 }
 
-const changeStatusFromDB = async (id: string, payload: any) => {
-  const { status } = payload
+const changeStatusFromDB = async (id: string, payload: {status: TServiceStatus, reason?: string}) => {
+  const { status, reason } = payload
 
   const service = await Service.findById(id).populate('author')
   if (!service || service.isDeleted) {
@@ -296,6 +296,7 @@ const changeStatusFromDB = async (id: string, payload: any) => {
     service.author as any,
     service,
     'service',
+    reason
   )
 
   return result
