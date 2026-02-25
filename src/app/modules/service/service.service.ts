@@ -82,9 +82,9 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
 const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   const ServiceModel = new QueryBuilder(
     Service.find({ isDeleted: false })
-      .select('title subtitle images address locationUrl location author')
+      .select('title subtitle images address locationUrl location author status')
       .populate([
-        { path: 'author', select: 'name photoUrl categories avgRating ratingCount isKycVerified' },
+        { path: 'author', select: 'name photoUrl email role categories avgRating ratingCount isKycVerified' },
       ]),
     query,
   )
