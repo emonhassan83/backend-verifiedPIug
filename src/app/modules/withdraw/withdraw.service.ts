@@ -208,9 +208,10 @@ const getAWithdrawFromDB = async (id: string) => {
 // 4. Admin withdraw request update
 const updateWithdrawFromDB = async (
   id: string,
-  payload: Partial<TWithdraw> & { processedBy: string },
+  payload: { status: string; note?: string },
 ) => {
-  const { status } = payload
+  const { status, note } = payload
+
   const session = await startSession()
   session.startTransaction()
 
@@ -234,7 +235,7 @@ const updateWithdrawFromDB = async (
     }
 
     // IF Status approved then Paystack transfer
-    if (payload.status === WITHDRAW_STATUS.approved) {
+    if (status === WITHDRAW_STATUS.approved) {
       if (user.balance < withdraw.amount) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
@@ -282,8 +283,7 @@ const updateWithdrawFromDB = async (
         {
           status: WITHDRAW_STATUS.paid,
           paystackTransferId: transferData.id,
-          processedBy: payload.processedBy,
-          note: payload.note,
+          note,
         },
         { session, new: true },
       )
@@ -293,16 +293,19 @@ const updateWithdrawFromDB = async (
     const updatedWithdraw = await Withdraw.findByIdAndUpdate(
       id,
       {
-        status: payload.status,
-        processedBy: payload.processedBy,
-        note: payload.note,
+        status,
+        note,
         processedAt: new Date(),
       },
       { session, new: true },
     )
 
     // Notify user: payment sent
-    await sendWithdrawalStatusNotify(updatedWithdraw, user, status!)
+    await sendWithdrawalStatusNotify(
+      updatedWithdraw,
+      user,
+      status as 'pending' | 'approved' | 'cancelled' | 'paid',
+    )
 
     await session.commitTransaction()
     return updatedWithdraw

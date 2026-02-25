@@ -39,7 +39,9 @@ export const messages = {
   subscription: {
     newPlan: 'New subscription plan added.',
     cancelled: 'Plan canceled !',
-    warningForPlan: "Alert for add new plan"
+    warningForPlan: "Alert for add new plan",
+    suspended: "Subscription has been suspended.",
+    active: "Subscription is now active."
   },
 
   paymentManagement: {

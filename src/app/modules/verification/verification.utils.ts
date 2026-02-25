@@ -12,6 +12,7 @@ export const sendKycStatusNotification = async (
   verification: TVerification,
   user: TUser,
   category: TNotifyCategory,
+  reason?: string | null,
 ) => {
   if (!canSendNotification(user, category)) return
 
@@ -27,7 +28,7 @@ export const sendKycStatusNotification = async (
       adminMsg: `User ${user?.name} (ID: ${user?._id}) has been approved for KYC.`,
     },
     [KYC_STATUS.denied]: {
-      userMsg: 'Your KYC verification has been denied. Please re-submit.',
+      userMsg: 'Your KYC verification has been denied. Reason: ' + (reason || 'No reason provided.'),
       adminMsg: `User ${user?.name} (ID: ${user?._id}) has been denied KYC.`,
     },
   }

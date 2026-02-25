@@ -16,6 +16,7 @@ import {
   PAYMENT_STATUS,
   RENEW_STATUS,
   SUBSCRIPTION_STATUS,
+  TSubscriptionStatus,
 } from './subscription.constants'
 
 export const startSubscriptionCron = () => {
@@ -53,7 +54,6 @@ export const startSubscriptionCron = () => {
 
       for (const subscription of alreadyExpired) {
         subscription.isExpired = true
-        subscription.isDeleted = true
         await subscription.save()
       }
 
@@ -192,18 +192,30 @@ const getSubscriptionById = async (id: string) => {
 
 const updateSubscription = async (
   id: string,
-  payload: Partial<TSubscriptions>,
+  payload: { status: TSubscriptionStatus; note?: string },
 ) => {
-  const subscription = await Subscription.findById(id)
-  if (!subscription || subscription?.isDeleted) {
+  const { status, note } = payload
+
+  const sub = await Subscription.findById(id)
+  if (!sub || sub?.isDeleted) {
+    throw new Error('Failed to get subscription')
+  }
+
+  const result = await Subscription.findByIdAndUpdate(
+    id,
+    { status },
+    {
+      new: true,
+    },
+  )
+  if (!result) {
     throw new Error('Failed to update subscription')
   }
 
-  const result = await Subscription.findByIdAndUpdate(id, payload, {
-    new: true,
-  })
-  if (!result) {
-    throw new Error('Failed to update subscription')
+  // notify user about subscription status change
+  const user = await User.findById(sub.user).select('fcmToken')
+  if (user && user?.fcmToken) {
+    await subscriptionNotifyToUser(status as 'active' | 'suspend', sub, user, note)
   }
 
   return result

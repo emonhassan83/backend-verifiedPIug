@@ -97,8 +97,11 @@ const getAIntoDB = async (id: string) => {
 }
 
 // Update Verification
-const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
-  const { status } = payload
+const updateAIntoDB = async (
+  id: string,
+  payload: { status: TKycStatus; reason?: string },
+) => {
+  const { status, reason } = payload
 
   const verification = await Verification.findById(id)
   if (!verification) {
@@ -130,7 +133,7 @@ const updateAIntoDB = async (id: string, payload: { status: TKycStatus }) => {
   // Trigger KYC Notification Util
   const user = await User.findById(verification.user)
   if (user && user?.fcmToken) {
-    await sendKycStatusNotification(result, user, 'profile')
+    await sendKycStatusNotification(result, user, 'profile', reason)
   }
 
   return result

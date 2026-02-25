@@ -8,7 +8,6 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { Service } from '../service/service.models'
 import { SERVICE_STATUS } from '../service/service.constants'
 import { Category } from '../categories/categories.models'
-import { Contents } from '../contents/contents.models'
 
 const searchDataIntoDB = async (query: Record<string, unknown>) => {
   const { searchTerm } = query
@@ -61,30 +60,30 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
 
 const getSuggestData = async (userId: string) => {
   // 1. User check
-  const user = await User.findById(userId).select('role').lean();
+  const user = await User.findById(userId).select('role').lean()
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
   }
 
-  // 2. popularSearch
-  const contents = await Contents.findOne({ isDeleted: false })
-    .sort({ createdAt: -1 })
-    .select('popularSearch')
-    .lean();
-
-  const popularSearch: string[] = contents?.popularSearch?.slice(0, 7) || [];
-
-  // 3. trendingCategories — top 7 title by listingCount
-  const trendingCategories: string[] = await Category.find()
+  // 2. popular categories
+  const popularCategories = await Category.find()
     .sort({ listingCount: -1 })
     .limit(7)
     .select('title')
     .lean()
-    .then(categories => categories.map(cat => cat.title));
+    .then((categories) => categories.map((cat) => cat.title))
+
+  // 3. trendingCategories — top 7 title by listingCount
+  const trendingCategories: string[] = await Category.find({ isTreading: true })
+    .sort({ listingCount: -1 })
+    .limit(7)
+    .select('title')
+    .lean()
+    .then((categories) => categories.map((cat) => cat.title))
 
   // 4. suggestPlanner / suggestVendor
-  let suggestPlanner: string[] = [];
-  let suggestVendor: string[] = [];
+  let suggestPlanner: string[] = []
+  let suggestVendor: string[] = []
 
   // Role-based suggestion
   if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
@@ -98,7 +97,7 @@ const getSuggestData = async (userId: string) => {
       .limit(7)
       .select('name')
       .lean()
-      .then(users => users.map(u => u.name));
+      .then((users) => users.map((u) => u.name))
   }
 
   if (user.role === USER_ROLE.planer) {
@@ -112,24 +111,24 @@ const getSuggestData = async (userId: string) => {
       .limit(7)
       .select('name')
       .lean()
-      .then(users => users.map(u => u.name));
+      .then((users) => users.map((u) => u.name))
   }
 
   const responseData: any = {
-    popularSearch,
+    popularCategories,
     trendingCategories,
-  };
+  }
 
   if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
-    responseData.suggestPlanner = suggestPlanner;
+    responseData.suggestPlanner = suggestPlanner
   }
 
   if (user.role === USER_ROLE.planer) {
-    responseData.suggestVendor = suggestVendor;
+    responseData.suggestVendor = suggestVendor
   }
 
-  return responseData;
-};
+  return responseData
+}
 
 // Create a new SearchHistory
 const insertIntoDB = async (payload: TSearchHistory, userId: string) => {

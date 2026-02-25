@@ -259,9 +259,10 @@ export const enablePaystackSubscription = async (
 }
 
 export const subscriptionNotifyToUser = async (
-  action: 'CANCELLED' | 'ENABLED' | 'WARNING',
+  action: 'CANCELLED' | 'ENABLED' | 'WARNING' | 'suspend' | 'active',
   subscription: TSubscriptions,
   user: TUser,
+  note?: string,
 ) => {
   if (!canSendNotification(user, 'subscription')) return
 
@@ -283,6 +284,14 @@ export const subscriptionNotifyToUser = async (
     case 'WARNING':
       message = messages.subscription.warningForPlan
       description = `Your subscription is expiring today. Please renew to continue enjoying our services!`
+      break
+    case 'suspend':
+      message = messages.subscription.suspended
+      description = `Your subscription has been suspended. Please contact support to reactivate it.`
+      break
+    case 'active':
+      message = messages.subscription.active
+      description = `Your subscription is now active. Enjoy uninterrupted access to premium features!`
       break
     default:
       throw new Error('Invalid action type')
