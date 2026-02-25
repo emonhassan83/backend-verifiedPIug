@@ -15,7 +15,7 @@ router.post(
 )
 
 router.patch(
-  '/:id',
+  '/status/:id',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor),
   subscriptionController.updateSubscription,
 )
