@@ -21,7 +21,7 @@ router.post(
 )
 
 router.put(
-  '/',
+  '/:id',
   auth(USER_ROLE.admin),
   upload.single('image'),
   parseData(),
