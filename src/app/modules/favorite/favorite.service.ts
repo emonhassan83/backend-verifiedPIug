@@ -58,8 +58,14 @@ const insertIntoDB = async (userId: string, serviceId: string) => {
 const getAllIntoDB = async (query: Record<string, unknown>) => {
   const favoriteQuery = new QueryBuilder(
     Favorite.find().populate([
-      { path: 'user', select: 'name photoUrl ratingCount avgRating' },
-      { path: 'service', select: 'title subtitle images price priceType' },
+      {
+        path: 'service',
+        select: 'title author subtitle images price priceType',
+        populate: {
+          path: 'author',
+          select: 'name photoUrl ratingCount avgRating',
+        },
+      },
     ]),
     query,
   )
@@ -80,8 +86,13 @@ const getAllIntoDB = async (query: Record<string, unknown>) => {
 
 const getAIntoDB = async (id: string) => {
   const result = await Favorite.findById(id).populate([
-    { path: 'user', select: 'name photoUrl ratingCount avgRating' },
-    { path: 'service' },
+    {
+      path: 'service',
+      populate: {
+        path: 'author',
+        select: 'name photoUrl ratingCount avgRating',
+      },
+    },
   ])
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Favorites not found')
