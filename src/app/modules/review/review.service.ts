@@ -65,7 +65,7 @@ const createReviews = async (
     const reviewPayload = {
       ...payload,
       user: userId, // enforce reviewer
-      overallRating: Number(overallRating.toFixed(1))
+      overallRating: Number(overallRating.toFixed(1)),
     }
 
     const [createdReview] = await Reviews.create([reviewPayload], {
@@ -112,24 +112,24 @@ const getAllReviews = async (query: Record<string, any>) => {
     Reviews.find()
       .populate([{ path: 'user', select: 'name photoUrl' }])
       .select('user author review overallRating createdAt'),
-    query
+    query,
   )
     .search(['review'])
     .filter()
     .sort()
     .paginate()
-    .fields();
+    .fields()
 
   // 1. Paginated reviews
-  const reviews = await reviewsModel.modelQuery.lean();
+  const reviews = await reviewsModel.modelQuery.lean()
 
   // 2. Total meta
-  const meta = await reviewsModel.countTotal();
+  const meta = await reviewsModel.countTotal()
 
   // 3. Rating breakdown
   const ratingBreakdown = await Reviews.aggregate([
     {
-      $match: reviewsModel.modelQuery.getFilter()
+      $match: reviewsModel.modelQuery.getFilter(),
     },
     {
       $group: {
@@ -144,34 +144,56 @@ const getAllReviews = async (query: Record<string, any>) => {
         count: 1,
       },
     },
-  ]);
+  ])
 
   // 4. create a count map for ratings
   const countMap = {
     excellent: 0, // 5.0
-    veryGood: 0,  // 4.0 - 4.9
-    good: 0,      // 3.0 - 3.9
-    fair: 0,      // 2.0 - 2.9
-    poor: 0,      // 1.0 - 1.9
-  };
+    veryGood: 0, // 4.0 - 4.9
+    good: 0, // 3.0 - 3.9
+    fair: 0, // 2.0 - 2.9
+    poor: 0, // 1.0 - 1.9
+  }
 
   ratingBreakdown.forEach((item) => {
-    const rating = Math.floor(item.rating); // 4.7 → 4
-    if (rating === 5) countMap.excellent = item.count;
-    else if (rating === 4) countMap.veryGood += item.count;
-    else if (rating === 3) countMap.good += item.count;
-    else if (rating === 2) countMap.fair += item.count;
-    else if (rating === 1) countMap.poor += item.count;
-  });
+    const rating = Math.floor(item.rating) // 4.7 → 4
+    if (rating === 5) countMap.excellent = item.count
+    else if (rating === 4) countMap.veryGood += item.count
+    else if (rating === 3) countMap.good += item.count
+    else if (rating === 2) countMap.fair += item.count
+    else if (rating === 1) countMap.poor += item.count
+  })
+
+  // 4. Author-এর avgRating এবং ratingCount
+  let avgRating = 0
+  let ratingCount = 0
+  let authorData = null
+
+  // single author data fetch
+  if (reviews.length > 0) {
+    // @ts-ignore
+    const authorId = reviews[0].author.toString()
+
+    authorData = await User.findById(authorId)
+      .select('avgRating ratingCount name photoUrl')
+      .lean()
+
+    if (authorData) {
+      avgRating = authorData.avgRating || 0
+      ratingCount = authorData.ratingCount || 0
+    }
+  }
 
   return {
     meta,
     data: {
       ratingBreakdown: countMap,
+      avgRating,
+      ratingCount,
       reviews,
     },
-  };
-};
+  }
+}
 
 const getReviewsById = async (id: string) => {
   const result = await Reviews.findById(id).populate([
