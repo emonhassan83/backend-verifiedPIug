@@ -13,7 +13,7 @@ const upload = multer({ storage })
 
 router.post(
   '/register',
-   upload.fields([
+  upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'coverPhoto', maxCount: 1 },
   ]),
@@ -45,7 +45,7 @@ router.put(
 router.put(
   '/update-my-profile',
   auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
-     upload.fields([
+  upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'coverPhoto', maxCount: 1 },
   ]),
@@ -56,7 +56,7 @@ router.put(
 router.put(
   '/:id',
   auth(USER_ROLE.admin),
-     upload.fields([
+  upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'coverPhoto', maxCount: 1 },
   ]),
@@ -83,6 +83,10 @@ router.get(
   UserControllers.getAllUsers,
 )
 
-router.get('/:id', auth(USER_ROLE.admin), UserControllers.getUserById)
+router.get(
+  '/:id',
+  auth(USER_ROLE.admin, USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  UserControllers.getUserById,
+)
 
 export const UserRoutes = router

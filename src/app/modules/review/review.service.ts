@@ -1,8 +1,7 @@
 import httpStatus from 'http-status'
 import { TReviews } from './review.interface'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { getAverageRating } from './review.utils'
-import mongoose, { ClientSession, startSession } from 'mongoose'
+import mongoose, { ClientSession } from 'mongoose'
 import { Reviews } from './review.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
@@ -110,28 +109,74 @@ const createReviews = async (
 
 const getAllReviews = async (query: Record<string, any>) => {
   const reviewsModel = new QueryBuilder(
-    Reviews.find().populate([{ path: 'user', select: 'name email photoUrl' }]),
-    query,
+    Reviews.find()
+      .populate([{ path: 'user', select: 'name photoUrl' }])
+      .select('user author review overallRating createdAt'),
+    query
   )
-    .search([''])
+    .search(['review'])
     .filter()
-    .paginate()
     .sort()
-    .fields()
+    .paginate()
+    .fields();
 
-  const data = await reviewsModel.modelQuery
-  const meta = await reviewsModel.countTotal()
+  // 1. Paginated reviews
+  const reviews = await reviewsModel.modelQuery.lean();
+
+  // 2. Total meta
+  const meta = await reviewsModel.countTotal();
+
+  // 3. Rating breakdown
+  const ratingBreakdown = await Reviews.aggregate([
+    {
+      $match: reviewsModel.modelQuery.getFilter()
+    },
+    {
+      $group: {
+        _id: '$overallRating',
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        rating: '$_id',
+        count: 1,
+      },
+    },
+  ]);
+
+  // 4. create a count map for ratings
+  const countMap = {
+    excellent: 0, // 5.0
+    veryGood: 0,  // 4.0 - 4.9
+    good: 0,      // 3.0 - 3.9
+    fair: 0,      // 2.0 - 2.9
+    poor: 0,      // 1.0 - 1.9
+  };
+
+  ratingBreakdown.forEach((item) => {
+    const rating = Math.floor(item.rating); // 4.7 → 4
+    if (rating === 5) countMap.excellent = item.count;
+    else if (rating === 4) countMap.veryGood += item.count;
+    else if (rating === 3) countMap.good += item.count;
+    else if (rating === 2) countMap.fair += item.count;
+    else if (rating === 1) countMap.poor += item.count;
+  });
 
   return {
-    data,
     meta,
-  }
-}
+    data: {
+      ratingBreakdown: countMap,
+      reviews,
+    },
+  };
+};
 
 const getReviewsById = async (id: string) => {
   const result = await Reviews.findById(id).populate([
     { path: 'order' },
-    { path: 'user', select: 'name email photoUrl' },
+    { path: 'user', select: 'name photoUrl' },
   ])
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Reviews not found!')
