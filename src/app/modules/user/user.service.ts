@@ -8,6 +8,9 @@ import {
   sendUserStatusNotifYToAdmin,
   sendUserStatusNotifYToUser,
 } from './user.utils'
+import { Subscription } from '../subscription/subscription.models'
+import { PAYMENT_STATUS } from '../payment/payment.constant'
+import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -90,7 +93,27 @@ const geUserByIdFromDB = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  return user
+  // Check active subscription
+  const today = new Date()
+  const activeSubscription = await Subscription.findOne({
+    user: id,
+    paymentStatus: PAYMENT_STATUS.paid,
+    status: SUBSCRIPTION_STATUS.active,
+    isDeleted: false,
+    isExpired: false,
+    expiredAt: { $gt: today },
+  })
+    .select('type expiredAt')
+    .lean()
+
+  const isActiveSubscription = !!activeSubscription
+  const subscriptionType = activeSubscription?.type || null
+
+  return {
+    ...user,
+    isActiveSubscription,
+    type: subscriptionType,
+  }
 }
 
 const changeUserStatusFromDB = async (payload: any) => {
