@@ -13,7 +13,7 @@ import { Package } from '../package/package.model'
 import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { startSession, Types } from 'mongoose'
-import * as crypto from 'crypto'
+import crypto from 'crypto';
 import { PAYMENT_STATUS } from './payment.constant'
 import { sendNotification } from '../../utils/sentNotification'
 import {
