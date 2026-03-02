@@ -59,59 +59,53 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
 }
 
 const getSuggestData = async (userId: string) => {
-  // 1. User check
   const user = await User.findById(userId).select('role').lean()
+
   if (!user || user.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
   }
 
-  // 2. popular categories
+  // Popular categories (top 7 by listingCount)
   const popularCategories = await Category.find()
     .sort({ listingCount: -1 })
     .limit(7)
-    .select('title')
+    .select('_id title')
     .lean()
-    .then((categories) => categories.map((cat) => cat.title))
 
-  // 3. trendingCategories — top 7 title by listingCount
-  const trendingCategories: string[] = await Category.find({ isTreading: true })
+  // Trending categories — dynamic + manual boost
+  const trendingCategories: any[] = await Category.find({ isTreading: true })
     .sort({ listingCount: -1 })
     .limit(7)
     .select('title')
-    .lean()
-    .then((categories) => categories.map((cat) => cat.title))
 
-  // 4. suggestPlanner / suggestVendor
-  let suggestPlanner: string[] = []
-  let suggestVendor: string[] = []
+  // Suggested Planners (for user & vendor roles)
+  let suggestPlanner: any[] = []
+  let suggestVendor: any[] = []
 
-  // Role-based suggestion
   if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
     suggestPlanner = await User.find({
       role: USER_ROLE.planer,
-      status: 'active',
+      status: USER_STATUS.active,
       isDeleted: false,
       avgRating: { $gt: 0 },
     })
       .sort({ avgRating: -1, ratingCount: -1 })
       .limit(7)
-      .select('name')
+      .select('_id name')
       .lean()
-      .then((users) => users.map((u) => u.name))
   }
 
   if (user.role === USER_ROLE.planer) {
     suggestVendor = await User.find({
       role: USER_ROLE.vendor,
-      status: 'active',
+      status: USER_STATUS.active,
       isDeleted: false,
       avgRating: { $gt: 0 },
     })
       .sort({ avgRating: -1, ratingCount: -1 })
       .limit(7)
-      .select('name')
+      .select('_id name')
       .lean()
-      .then((users) => users.map((u) => u.name))
   }
 
   const responseData: any = {
@@ -132,64 +126,134 @@ const getSuggestData = async (userId: string) => {
 
 // Create a new SearchHistory
 const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
-  const { modelType, refId } = payload
+  const { modelType, refId } = payload;
 
-  const user = await User.findById(userId)
+  // 1. User validation
+  const user = await User.findById(userId);
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Author not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
   }
 
-  //  Validate refId based on modelType - using switch for better readability & performance
-  let isValidRef = false
-
+  // 2. Reference validation with switch (clean & performant)
+  let isValidRef = false;
   switch (modelType) {
     case SEARCH_MODEL_TYPE.User:
       isValidRef = !!(await User.exists({
         _id: refId,
         status: USER_STATUS.active,
         isDeleted: false,
-      }))
-      break
+      }));
+      break;
 
     case SEARCH_MODEL_TYPE.Service:
       isValidRef = !!(await Service.exists({
         _id: refId,
         status: SERVICE_STATUS.active,
         isDeleted: false,
-      }))
-      break
+      }));
+      break;
 
     case SEARCH_MODEL_TYPE.Category:
       isValidRef = !!(await Category.exists({
         _id: refId,
         isDeleted: false,
-      }))
-      break
+      }));
+      break;
 
     default:
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type!')
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type!');
   }
 
   if (!isValidRef) {
-    throw new AppError(httpStatus.NOT_FOUND, `Invalid ${modelType} reference!`)
+    throw new AppError(httpStatus.NOT_FOUND, `Invalid ${modelType} reference ID!`);
   }
 
-  // 3. Check existing history - upsert style (fastest way to avoid race conditions)
-  const existing = await SearchHistory.findOneAndUpdate(
-    { userId: user._id, modelType, refId },
-    { new: true, upsert: true, setDefaultsOnInsert: true },
-  )
+  // 3. Upsert search history (prevents duplicates + updates timestamp)
+  const history = await SearchHistory.findOneAndUpdate(
+    { userId, modelType, refId },
+    {
+      $setOnInsert: { createdAt: new Date() }, // only on insert
+      $set: { updatedAt: new Date() },         // always update timestamp
+    },
+    {
+      upsert: true,
+      new: true,         // return the new/updated document
+      setDefaultsOnInsert: true,
+    }
+  );
 
-  // 4. Return result
-  return existing
-}
+  // 4. Return clean object
+  return history
+};
 
 // Get all SearchHistory
-const getAllIntoDB = async (query: Record<string, any>) => {
+const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
+  const user = await User.findById(userId).select('role').lean()
+
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
+  }
+
+  // Popular categories (top 7 by listingCount)
+  const popularCategories = await Category.find()
+    .sort({ listingCount: -1 })
+    .limit(6)
+    .select('_id title')
+    .lean()
+
+  // Trending categories — dynamic + manual boost
+  const trendingCategories: any[] = await Category.find({ isTreading: true })
+    .sort({ listingCount: -1 })
+    .limit(6)
+    .select('title')
+
+  // Suggested Planners (for user & vendor roles)
+  let suggestPlanner: any[] = []
+  let suggestVendor: any[] = []
+
+  if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
+    suggestPlanner = await User.find({
+      role: USER_ROLE.planer,
+      status: USER_STATUS.active,
+      isDeleted: false,
+      avgRating: { $gt: 0 },
+    })
+      .sort({ avgRating: -1, ratingCount: -1 })
+      .limit(6)
+      .select('_id name')
+      .lean()
+  }
+
+  if (user.role === USER_ROLE.planer) {
+    suggestVendor = await User.find({
+      role: USER_ROLE.vendor,
+      status: USER_STATUS.active,
+      isDeleted: false,
+      avgRating: { $gt: 0 },
+    })
+      .sort({ avgRating: -1, ratingCount: -1 })
+      .limit(7)
+      .select('_id name')
+      .lean()
+  }
+
+  const responseData: any = {
+    popularCategories,
+    trendingCategories,
+  }
+
+  if (user.role === USER_ROLE.user || user.role === USER_ROLE.vendor) {
+    responseData.suggestPlanner = suggestPlanner
+  }
+
+  if (user.role === USER_ROLE.planer) {
+    responseData.suggestVendor = suggestVendor
+  }
+
   const SearchHistoryModel = new QueryBuilder(
     SearchHistory.find().populate([
       { path: 'refId', select: '_id name title photoUrl images logo' },
-    ]),
+    ]).select('modelType refId createdAt').lean(),
     query,
   )
     .search([''])
@@ -201,7 +265,7 @@ const getAllIntoDB = async (query: Record<string, any>) => {
   const data = await SearchHistoryModel.modelQuery
   const meta = await SearchHistoryModel.countTotal()
   return {
-    data,
+    data: { ...responseData, searchHistory: data },
     meta,
   }
 }

@@ -38,7 +38,7 @@ const insertIntoDB = catchAsync(async (req, res) => {
 
 const getAllIntoDB = catchAsync(async (req, res) => {
   req.query['userId'] = req.user._id;
-  const result = await SearchHistoryService.getAllIntoDB(req.query)
+  const result = await SearchHistoryService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     success: true,

@@ -9,7 +9,7 @@ const searchHistoriesSchema = new Schema<TSearchHistory>(
       enum: Object.values(SEARCH_MODEL_TYPE),
       required: true,
     },
-    refId: { type: Schema.Types.ObjectId, ref: 'Deal', required: true },
+    refId: { type: Schema.Types.ObjectId, refPath: 'modelType', required: true },
   },
 )
 
