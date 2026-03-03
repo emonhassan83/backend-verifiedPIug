@@ -569,10 +569,420 @@ const vendorAnalysisData = async (
   }
 }
 
+const planerLeadsData = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  const user = await User.findById(userId);
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!');
+  }
+
+  const tab = (query.tab as string) || 'new'; // default to 'new'
+  const page = parseInt(query.page as string) || 1;
+  const limit = parseInt(query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  // Base match: planner is receiver + authority is client
+  const baseMatch = {
+    receiver: new mongoose.Types.ObjectId(userId),
+    authority: ORDER_AUTHORITY.client,
+    isDeleted: false,
+  };
+
+  // ──────────────────────────────────────────────
+  // 1. New Leads: unique senders with exactly 1 order (first-time clients)
+  // ──────────────────────────────────────────────
+  const newLeadsAgg = await Order.aggregate([
+    { $match: { ...baseMatch } },
+    {
+      $group: {
+        _id: '$sender',
+        orderCount: { $sum: 1 },
+        firstOrder: { $min: '$createdAt' },
+      },
+    },
+    { $match: { orderCount: 1 } },
+    { $count: 'total' },
+  ]);
+
+  const newLeadsCount = newLeadsAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 2. Contracted: unique senders with at least one pending/running/completed
+  // ──────────────────────────────────────────────
+  const contractedAgg = await Order.aggregate([
+    {
+      $match: {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+      },
+    },
+    {
+      $group: {
+        _id: '$sender',
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const contractedCount = contractedAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 3. Qualified: unique senders with at least one running/completed
+  // ──────────────────────────────────────────────
+  const qualifiedAgg = await Order.aggregate([
+    {
+      $match: {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
+      },
+    },
+    {
+      $group: {
+        _id: '$sender',
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const qualifiedCount = qualifiedAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 4. Left: unique senders whose ALL orders are cancelled/denied/refunded
+  // ──────────────────────────────────────────────
+  const leftAgg = await Order.aggregate([
+    { $match: baseMatch },
+    {
+      $group: {
+        _id: '$sender',
+        statuses: { $addToSet: '$status' },
+        orderCount: { $sum: 1 },
+      },
+    },
+    {
+      $match: {
+        $and: [
+          { statuses: { $nin: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] } },
+          { statuses: { $in: [ORDER_STATUS.cancelled, ORDER_STATUS.denied, ORDER_STATUS.refunded] } },
+        ],
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const leftCount = leftAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 5. Lead List — filtered by tab
+  // ──────────────────────────────────────────────
+  let matchFilter: any = { ...baseMatch };
+
+  switch (tab.toLowerCase()) {
+    case 'new':
+      // First-time clients (only 1 order total)
+      const firstTimeSenders = await Order.aggregate([
+        { $match: baseMatch },
+        { $group: { _id: '$sender', count: { $sum: 1 } } },
+        { $match: { count: 1 } },
+        { $project: { _id: 0, sender: '$_id' } },
+      ]).then(r => r.map(s => s.sender));
+
+      matchFilter.sender = { $in: firstTimeSenders };
+      break;
+
+    case 'contacted':
+      // Has at least one pending/running/completed
+      const contactedSenders = await Order.distinct('sender', {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+      });
+      matchFilter.sender = { $in: contactedSenders };
+      break;
+
+    case 'qualified':
+      // Has at least one running/completed
+      const qualifiedSenders = await Order.distinct('sender', {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
+      });
+      matchFilter.sender = { $in: qualifiedSenders };
+      break;
+
+    case 'cancel':
+      // Only cancelled/denied/refunded
+      const cancelSenders = await Order.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: '$sender',
+            hasActive: {
+              $sum: {
+                $cond: [
+                  {
+                    $in: [
+                      '$status',
+                      [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed],
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        { $match: { hasActive: 0 } },
+        { $project: { _id: 0, sender: '$_id' } },
+      ]).then(r => r.map(s => s.sender));
+
+      matchFilter.sender = { $in: cancelSenders };
+      break;
+
+    default:
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value');
+  }
+
+  const leadList = await Order.find(matchFilter)
+    .select('title type shortDescription startDate address location locationUrl receiver')
+    .populate({
+      path: 'receiver',
+      select: 'name photoUrl',
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const totalLeads = await Order.countDocuments(matchFilter);
+
+  return {
+    meta: {
+      page,
+      limit,
+      total: totalLeads,
+      totalPages: Math.ceil(totalLeads / limit),
+    },
+    data: {
+      newLeads: newLeadsCount,
+      contracted: contractedCount,
+      qualified: qualifiedCount,
+      left: leftCount,
+      leadList,
+    },
+  };
+};
+
+const vendorLeadsData = async (
+  userId: string,
+  query: Record<string, unknown>,
+) => {
+  const user = await User.findById(userId);
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
+  }
+
+  const tab = (query.tab as string)?.toLowerCase() || 'new'; // default to 'new'
+  const page = parseInt(query.page as string) || 1;
+  const limit = parseInt(query.limit as string) || 10;
+  const skip = (page - 1) * limit;
+
+  // Base match: vendor is sender + authority is vendor
+  const baseMatch = {
+    sender: new mongoose.Types.ObjectId(userId),
+    authority: ORDER_AUTHORITY.vendor,
+    isDeleted: false,
+  };
+
+  // ──────────────────────────────────────────────
+  // 1. New Leads: unique receivers (planners) with exactly 1 order (first-time collaboration)
+  // ──────────────────────────────────────────────
+  const newLeadsAgg = await Order.aggregate([
+    { $match: { ...baseMatch } },
+    {
+      $group: {
+        _id: '$receiver',
+        orderCount: { $sum: 1 },
+        firstOrder: { $min: '$createdAt' },
+      },
+    },
+    { $match: { orderCount: 1 } },
+    { $count: 'total' },
+  ]);
+
+  const newLeadsCount = newLeadsAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 2. Contracted: unique planners with at least one pending/running/completed order
+  // ──────────────────────────────────────────────
+  const contractedAgg = await Order.aggregate([
+    {
+      $match: {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+      },
+    },
+    {
+      $group: {
+        _id: '$receiver',
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const contractedCount = contractedAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 3. Qualified: unique planners with at least one running/completed order
+  // ──────────────────────────────────────────────
+  const qualifiedAgg = await Order.aggregate([
+    {
+      $match: {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
+      },
+    },
+    {
+      $group: {
+        _id: '$receiver',
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const qualifiedCount = qualifiedAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 4. Left: unique planners whose ALL orders are cancelled/denied/refunded
+  // ──────────────────────────────────────────────
+  const leftAgg = await Order.aggregate([
+    { $match: baseMatch },
+    {
+      $group: {
+        _id: '$receiver',
+        statuses: { $addToSet: '$status' },
+        orderCount: { $sum: 1 },
+      },
+    },
+    {
+      $match: {
+        $and: [
+          { statuses: { $nin: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] } },
+          { statuses: { $in: [ORDER_STATUS.cancelled, ORDER_STATUS.denied, ORDER_STATUS.refunded] } },
+        ],
+      },
+    },
+    { $count: 'total' },
+  ]);
+
+  const leftCount = leftAgg[0]?.total || 0;
+
+  // ──────────────────────────────────────────────
+  // 5. Lead List — filtered by tab (orders where vendor is sender)
+  // ──────────────────────────────────────────────
+  let matchFilter: any = { ...baseMatch };
+
+  switch (tab) {
+    case 'new':
+      // First-time planners (only 1 order total)
+      const firstTimeReceivers = await Order.aggregate([
+        { $match: baseMatch },
+        { $group: { _id: '$receiver', count: { $sum: 1 } } },
+        { $match: { count: 1 } },
+        { $project: { _id: 0, receiver: '$_id' } },
+      ]).then(r => r.map(s => s.receiver));
+
+      matchFilter.receiver = { $in: firstTimeReceivers };
+      break;
+
+    case 'contacted':
+      // Has at least one pending/running/completed
+      const contactedReceivers = await Order.distinct('receiver', {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+      });
+      matchFilter.receiver = { $in: contactedReceivers };
+      break;
+
+    case 'qualified':
+      // Has at least one running/completed
+      const qualifiedReceivers = await Order.distinct('receiver', {
+        ...baseMatch,
+        status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
+      });
+      matchFilter.receiver = { $in: qualifiedReceivers };
+      break;
+
+    case 'cancel':
+      // Only cancelled/denied/refunded
+      const cancelReceivers = await Order.aggregate([
+        { $match: baseMatch },
+        {
+          $group: {
+            _id: '$receiver',
+            hasActive: {
+              $sum: {
+                $cond: [
+                  {
+                    $in: [
+                      '$status',
+                      [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed],
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        { $match: { hasActive: 0 } },
+        { $project: { _id: 0, receiver: '$_id' } },
+      ]).then(r => r.map(s => s.receiver));
+
+      matchFilter.receiver = { $in: cancelReceivers };
+      break;
+
+    default:
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value');
+  }
+
+  const leadList = await Order.find(matchFilter)
+    .select('title type shortDescription startDate address location locationUrl receiver')
+    .populate({
+      path: 'receiver',
+      select: 'name photoUrl',
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  const totalLeads = await Order.countDocuments(matchFilter);
+
+  return {
+    meta: {
+      page,
+      limit,
+      total: totalLeads,
+      totalPages: Math.ceil(totalLeads / limit),
+    },
+    data: {
+      newLeads: newLeadsCount,
+      contracted: contractedCount,
+      qualified: qualifiedCount,
+      left: leftCount,
+      leadList,
+    },
+  };
+};
+
 export const AnalysisService = {
   adminAnalysisData,
   planerAnalysisRevenue,
   planerAnalysisEventType,
   planerAnalysisTopVendor,
   vendorAnalysisData,
+  planerLeadsData,
+  vendorLeadsData
 }

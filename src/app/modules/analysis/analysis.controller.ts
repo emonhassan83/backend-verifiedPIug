@@ -58,10 +58,34 @@ const vendorAnalysisData = catchAsync(async (req, res) => {
   })
 })
 
+const planerLeadsData = catchAsync(async (req, res) => {
+  const result = await AnalysisService.planerLeadsData(req.user._id, req.query)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Planer leads data fetch successfully!',
+    data: result,
+  })
+})
+
+const vendorLeadsData = catchAsync(async (req, res) => {
+  const result = await AnalysisService.vendorLeadsData(req.user._id, req.query)
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Vendor leads data fetch successfully!',
+    data: result,
+  })
+})
+
 export const AnalysisController = {
   adminAnalysisData,
   planerRevenueAnalysis,
   planerEventAnalysis,
   planerVendorAnalysis,
-  vendorAnalysisData
+  vendorAnalysisData,
+  planerLeadsData,
+  vendorLeadsData
 }

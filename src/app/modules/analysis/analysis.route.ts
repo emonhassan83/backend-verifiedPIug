@@ -33,4 +33,16 @@ router.get(
   AnalysisController.vendorAnalysisData,
 )
 
+router.get(
+  '/planer-leads',
+  auth(USER_ROLE.planer),
+  AnalysisController.planerLeadsData,
+)
+
+router.get(
+  '/vendor-leads',
+  auth(USER_ROLE.vendor),
+  AnalysisController.vendorLeadsData,
+)
+
 export const AnalysisRoutes = router
