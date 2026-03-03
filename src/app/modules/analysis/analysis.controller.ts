@@ -65,7 +65,8 @@ const planerLeadsData = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Planer leads data fetch successfully!',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 
@@ -76,7 +77,8 @@ const vendorLeadsData = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     success: true,
     message: 'Vendor leads data fetch successfully!',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 
