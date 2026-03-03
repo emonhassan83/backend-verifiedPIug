@@ -155,7 +155,8 @@ const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
 
     case SEARCH_MODEL_TYPE.Category:
       isValidRef = !!(await Category.exists({
-        _id: refId
+        _id: refId,
+        isDeleted: false,
       }));
       break;
 

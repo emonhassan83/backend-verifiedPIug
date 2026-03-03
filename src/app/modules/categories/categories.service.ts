@@ -36,7 +36,10 @@ const insertIntoDB = async (payload: TCategory, file: any) => {
 
 // Get all category
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const CategoryModel = new QueryBuilder(Category.find(), query)
+  const CategoryModel = new QueryBuilder(
+    Category.find({ isDeleted: false }),
+    query,
+  )
     .search(['title'])
     .filter()
     .paginate()
@@ -54,7 +57,7 @@ const getAllIntoDB = async (query: Record<string, any>) => {
 // Get Category by ID
 const getAIntoDB = async (id: string) => {
   const result = await Category.findById(id)
-  if (!result) {
+  if (!result || result?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Category not found')
   }
 
@@ -68,7 +71,7 @@ const updateAIntoDB = async (
   file: any,
 ) => {
   const category = await Category.findById(id)
-  if (!category) {
+  if (!category || category?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
   }
 
@@ -96,7 +99,7 @@ const updateAIntoDB = async (
 // Toggle Trading Category
 const toggleTradingCategory = async (id: string) => {
   const category = await Category.findById(id)
-  if (!category) {
+  if (!category || category?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
   }
 
@@ -111,10 +114,16 @@ const toggleTradingCategory = async (id: string) => {
 
 // Delete Category
 const deleteAIntoDB = async (id: string) => {
-  const result = await Category.findByIdAndDelete(id)
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Category deletion failed')
+  const category = await Category.findById(id)
+  if (!category) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Category not found!')
   }
+
+  const result = await Category.findByIdAndUpdate(
+    id,
+    { isDeleted: true },
+    { new: true },
+  )
 
   return result
 }

@@ -19,6 +19,10 @@ const categorySchema = new Schema<TCategory>(
       type: Boolean,
       default: false, 
     },
+    isDeleted: {
+      type: Boolean,
+      default: false, 
+    },
   },
   {
     timestamps: true,
