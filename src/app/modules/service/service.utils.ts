@@ -34,7 +34,6 @@ export const attachFavoriteFlag = async (
   }))
 }
 
-
 export const sendServiceStatusNotifyToAuthor = async (
   status: keyof typeof SERVICE_STATUS,
   user: TUser,

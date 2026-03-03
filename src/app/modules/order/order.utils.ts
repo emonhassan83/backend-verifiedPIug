@@ -16,8 +16,7 @@ export const sendNewOrderNotification = async (
   category: TNotifyCategory,
 ) => {
   const user = await User.findById(receiverId)
-  if (!user) return
-  if (!canSendNotification(user, category)) return
+  if (!user || !canSendNotification(user, category)) return
 
   const message = messages.order.newOrder
   const description = `You have received a new order request: "${order.title}". Please review and respond.`
@@ -43,12 +42,10 @@ export const changeOrderStatusNotification = async (
   category: TNotifyCategory,
 ) => {
   const receiver = await User.findById(receiverId)
-  if (!receiver) return
-  if (!canSendNotification(receiver, category)) return
+  if (!receiver || !canSendNotification(receiver, category)) return
 
   const sender = await User.findById(senderId)
-  if (!sender) return
-  if (!canSendNotification(sender, category)) return
+  if (!sender || !canSendNotification(sender, category)) return
 
   let message = ''
   let description = ''

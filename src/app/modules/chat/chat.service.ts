@@ -224,7 +224,7 @@ const updateChatStatus = async (
     new Types.ObjectId(id),
     new Types.ObjectId(userId),
     payload.status,
-    'service',
+    'bookings',
   )
 
   return result

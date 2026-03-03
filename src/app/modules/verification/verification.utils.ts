@@ -18,28 +18,34 @@ export const sendKycStatusNotification = async (
 
   const { status } = verification
 
-  const statusTextMap = {
-    [KYC_STATUS.pending]: {
-      userMsg: 'Your KYC verification is under review.',
-      adminMsg: `User ${user?.name} (ID: ${user?._id}) has submitted KYC and is pending review.`,
-    },
-    [KYC_STATUS.approved]: {
-      userMsg: 'Your KYC verification has been approved.',
-      adminMsg: `User ${user?.name} (ID: ${user?._id}) has been approved for KYC.`,
-    },
-    [KYC_STATUS.denied]: {
-      userMsg: 'Your KYC verification has been denied. Reason: ' + (reason || 'No reason provided.'),
-      adminMsg: `User ${user?.name} (ID: ${user?._id}) has been denied KYC.`,
-    },
+  let message
+  let description
+
+  switch (status) {
+    case KYC_STATUS.pending: {
+      message = 'KYC Verification Submitted'
+      description = 'Your KYC verification is under review.'
+      break
+    }
+    case KYC_STATUS.approved: {
+      message = 'KYC Verification Update'
+      description = 'Your KYC verification has been approved.'
+      break
+    }
+    case KYC_STATUS.denied: {
+      message = 'KYC Verification Update'
+      description =
+        'Your KYC verification has been denied. Reason: ' +
+        (reason || 'No reason provided.')
+      break
+    }
   }
-  
-  const content = statusTextMap[status]
 
   // Notify User
   const payload = {
     receiver: user._id,
-    message: 'KYC Verification Update',
-    description: content.userMsg,
+    message,
+    description,
     reference: verification._id,
     model_type: modeType.KYC,
   }

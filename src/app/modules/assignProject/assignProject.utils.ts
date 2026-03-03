@@ -1,8 +1,6 @@
-import { Types } from 'mongoose'
 import { sendNotification } from '../../utils/sentNotification'
 import { messages } from '../notification/notification.constant'
 import { modeType } from '../notification/notification.interface'
-import { User } from '../user/user.model'
 import { VENDOR_ASSIGNMENT_STATUS } from './assignProject.constants'
 import {
   canSendNotification,
@@ -17,9 +15,9 @@ export const vendorProjectAssignNotify = async (
   category: TNotifyCategory,
 ) => {
   if (!canSendNotification(user, category)) return
-  
-  let message = ''
-  let description = ''
+
+  let message
+  let description
 
   switch (status) {
     case VENDOR_ASSIGNMENT_STATUS.assigned:

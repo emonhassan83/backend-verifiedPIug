@@ -129,7 +129,7 @@ const updateParticipant = async (
 
   // 6. Send push notification to other active participants (exclude actor)
   if (status) {
-    await notifyChatParticipants(participant.chat, requesterId, status, 'service')
+    await notifyChatParticipants(participant.chat, requesterId, status, 'bookings')
   }
 
   return result

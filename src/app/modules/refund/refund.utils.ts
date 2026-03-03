@@ -2,10 +2,7 @@ import { modeType } from '../notification/notification.interface'
 import { messages } from '../notification/notification.constant'
 import { TUser } from '../user/user.interface'
 import { TRefund } from './refund.interface'
-import {
-  canSendNotification,
-  TNotifyCategory,
-} from '../notification/notification.utils'
+import { canSendNotification } from '../notification/notification.utils'
 import { sendNotification } from '../../utils/sentNotification'
 
 export const refundAddNotifyToVendor = async (
@@ -38,7 +35,7 @@ export const refundAddNotifyToVendor = async (
     model_type: modeType.Refund,
   }
 
-  await sendNotification([user.fcmToken], notifyPayload)
+  await sendNotification([vendor.fcmToken], notifyPayload)
 }
 
 export const refundChangeStatusNotifyToUser = async (
