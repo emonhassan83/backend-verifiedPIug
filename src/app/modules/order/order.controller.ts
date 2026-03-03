@@ -146,7 +146,7 @@ const changeStatus = catchAsync(async (req: Request, res: Response) => {
 })
 
 const cancelOrder = catchAsync(async (req: Request, res: Response) => {
-  const result = await OrderService.changeStatusFromDB(
+  const result = await OrderService.cancelOrderFromDB(
     req.params.id,
     req.body,
     req.user._id,
