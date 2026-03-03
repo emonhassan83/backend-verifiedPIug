@@ -32,8 +32,7 @@ export const sendKycStatusNotification = async (
       adminMsg: `User ${user?.name} (ID: ${user?._id}) has been denied KYC.`,
     },
   }
-
-  //  @ts-ignore
+  
   const content = statusTextMap[status]
 
   // Notify User
