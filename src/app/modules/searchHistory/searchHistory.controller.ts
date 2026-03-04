@@ -63,7 +63,7 @@ const deleteAIntoDB = catchAsync(async (req, res) => {
 
 const clearHistoriesIntoDB = catchAsync(async (req, res) => {
   const result = await SearchHistoryService.clearSearchHistory(
-    req.params.userId,
+    req.params._id,
   )
 
   sendResponse(res, {
