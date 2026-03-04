@@ -277,7 +277,7 @@ const clearSearchHistory = async (userId: string) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
   }
 
-  const result = await SearchHistory.deleteMany({ user: user._id })
+  const result = await SearchHistory.deleteMany({ userId })
   if (result.deletedCount === 0) {
     throw new AppError(httpStatus.NOT_FOUND, 'No search history found to clear')
   }
