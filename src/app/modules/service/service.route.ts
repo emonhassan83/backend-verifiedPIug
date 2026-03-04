@@ -42,7 +42,11 @@ router.put(
   ServiceController.updateAIntoDB,
 )
 
-router.get('/active', auth(USER_ROLE.user), ServiceController.getActiveServices)
+router.get(
+  '/active',
+  auth(USER_ROLE.planer, USER_ROLE.vendor, USER_ROLE.user),
+  ServiceController.getActiveServices,
+)
 
 router.get(
   '/author/my-services',
