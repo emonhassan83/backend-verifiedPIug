@@ -24,33 +24,33 @@ const adminAnalysisData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const { order_year, subscription_year, booking_year } = query
+  const { order_year, subscription_year, booking_year } = query;
 
-  const admin = await User.findById(userId)
+  const admin = await User.findById(userId);
   if (!admin || admin?.isDeleted || admin.role !== USER_ROLE.admin) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Admin not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Admin not found!');
   }
 
   const selectedOrderYear = order_year
     ? parseInt(order_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear()
+    : new Date().getFullYear();
 
   const selectedSubscriptionYear = subscription_year
     ? parseInt(subscription_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear()
+    : new Date().getFullYear();
 
   const selectedBookingYear = booking_year
     ? parseInt(booking_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear()
+    : new Date().getFullYear();
 
-  // 1. totalUserCount
+  // 1. Total active users
   const totalUserCount = await User.countDocuments({
     role: USER_ROLE.user,
     status: USER_STATUS.active,
     isDeleted: false,
-  })
+  });
 
-  // 2. avgBooking (average order value from paid orders)
+  // 2. Average booking value (from paid orders)
   const avgBookingResult = await Payment.aggregate([
     {
       $match: {
@@ -65,17 +65,17 @@ const adminAnalysisData = async (
         avgAmount: { $avg: '$amount' },
       },
     },
-  ])
+  ]);
 
-  const avgBookingValue = Math.round(avgBookingResult[0]?.avgAmount || 0)
+  const avgBookingValue = Math.round(avgBookingResult[0]?.avgAmount || 0);
 
-  // 3. activeSubscriptionCount
+  // 3. Active subscription count
   const activeSubscriptionCount = await Subscription.countDocuments({
     status: SUBSCRIPTION_STATUS.active,
     isDeleted: false,
-  })
+  });
 
-  // 4. totalEarning (all paid payments sum)
+  // 4. Total earning (all paid payments)
   const totalEarningResult = await Payment.aggregate([
     {
       $match: {
@@ -89,33 +89,25 @@ const adminAnalysisData = async (
         total: { $sum: '$amount' },
       },
     },
-  ])
+  ]);
 
-  const totalEarning = totalEarningResult[0]?.total || 0
+  const totalEarning = totalEarningResult[0]?.total || 0;
 
-  // 5. earningOverview (monthly breakdown for planner & vendor earnings from completed orders)
-  const earningOverview = await getEarningOverview(selectedOrderYear)
-  const earningOverviewData = {
-    planerEarningOverview: earningOverview.map((item) => ({
-      month: item.month,
-      amount: Math.round(item.planerEarning),
-    })),
-    vendorEarningOverview: earningOverview.map((item) => ({
-      month: item.month,
-      amount: Math.round(item.vendorEarning),
-    })),
-    totalEarningOverview: earningOverview.map((item) => ({
-      month: item.month,
-      amount: Math.round(item.totalEarning),
-    })),
-  }
+  // 5. Unified earning overview (single array with planner, vendor, and total per month)
+  const earningOverviewRaw = await getEarningOverview(selectedOrderYear);
 
-  // 6. subscription earning overview (monthly for subscription payments)
-  const subscriptionEarningOverview = await subscriptionEarning(
-    selectedSubscriptionYear,
-  )
+  // Transform into single array of objects
+  const earningOverview = earningOverviewRaw.map(item => ({
+    month: item.month,
+    planner: Math.round(item.planerEarning),
+    vendor: Math.round(item.vendorEarning),
+    total: Math.round(item.totalEarning),
+  }));
 
-  // 7. bookingOverview (percentage of orders by status)
+  // 6. Subscription earning overview (monthly)
+  const subscriptionEarningOverview = await subscriptionEarning(selectedSubscriptionYear);
+
+  // 7. Booking overview (percentage by status)
   const bookingOverviewResult = await Order.aggregate([
     {
       $match: {
@@ -139,9 +131,7 @@ const adminAnalysisData = async (
         statusBreakdown: { $push: { status: '$_id', count: '$count' } },
       },
     },
-    {
-      $unwind: '$statusBreakdown',
-    },
+    { $unwind: '$statusBreakdown' },
     {
       $project: {
         status: '$statusBreakdown.status',
@@ -151,23 +141,23 @@ const adminAnalysisData = async (
       },
     },
     { $sort: { percentage: -1 } },
-  ])
+  ]);
 
   const bookingOverview = bookingOverviewResult.reduce((acc, curr) => {
-    acc[curr.status] = Math.round(curr.percentage)
-    return acc
-  }, {})
+    acc[curr.status] = Math.round(curr.percentage);
+    return acc;
+  }, {});
 
   return {
     totalUserCount,
     avgBookingValue,
     activeSubscriptionCount,
     totalEarning,
-    earningOverview: earningOverviewData,
+    earningOverview,                     // ← Now a single array with planner, vendor, total
     subscriptionEarningOverview,
     bookingOverview,
-  }
-}
+  };
+};
 
 const planerAnalysisRevenue = async (
   userId: string,
