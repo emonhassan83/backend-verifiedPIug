@@ -30,6 +30,7 @@ import { ParticipantRoutes } from '../modules/participant/participant.route'
 import { PaystackRecipientRoutes } from '../modules/paystackRecipient/paystackRecipient.route'
 import { MetaRoutes } from '../modules/meta/meta.route'
 import { AnalysisRoutes } from '../modules/analysis/analysis.route'
+import { SupportRoutes } from '../modules/support/support.route'
 
 const router = Router()
 
@@ -145,6 +146,10 @@ const moduleRoutes = [
   {
     path: '/contents',
     route: contentsRoutes,
+  },
+  {
+    path: '/supports',
+    route: SupportRoutes,
   },
   {
     path: '/notifications',
