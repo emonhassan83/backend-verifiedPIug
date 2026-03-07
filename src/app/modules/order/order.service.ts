@@ -14,6 +14,7 @@ import { Refund } from '../refund/refund.model'
 import { REFUND_STATUS } from '../refund/refund.constant'
 import { Payment } from '../payment/payment.model'
 import { USER_ROLE } from '../user/user.constant'
+import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -230,7 +231,7 @@ const cancelOrderFromDB = async (
       throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
     }
 
-    // 3. Authorization
+    // 3. Authorization: only sender or receiver can cancel
     const isAuthorized =
       order.sender.toString() === userId || order.receiver.toString() === userId
     if (!isAuthorized) {
@@ -240,7 +241,7 @@ const cancelOrderFromDB = async (
       )
     }
 
-    // 4. Strict status check
+    // 4. Strict status check: only running orders can be cancelled
     if (order.status !== ORDER_STATUS.running) {
       throw new AppError(
         httpStatus.FORBIDDEN,
@@ -248,50 +249,62 @@ const cancelOrderFromDB = async (
       )
     }
 
-    // 5. Check payment exists & is paid
-    const payment = await Payment.findOne({
-      reference: order._id,
-      modelType: 'Order',
-      isPaid: true,
-      isDeleted: false,
-    }).session(session)
+    // ──────────────────────────────────────────────
+    // NEW LOGIC: Skip refund steps if authority is 'vendor'
+    // ──────────────────────────────────────────────
+    const isVendorAuthority = order.authority === ORDER_AUTHORITY.vendor
 
-    if (!payment) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'No valid paid payment found for this order',
+    if (!isVendorAuthority) {
+      // Step 5: Check if any paid payment exists
+      const payment = await Payment.findOne({
+        reference: order._id,
+        modelType: PAYMENT_MODEL_TYPE.Order,
+        isPaid: true,
+        isDeleted: false,
+      }).session(session)
+
+      if (!payment) {
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'No valid paid payment found for this order. Cancellation not allowed without payment.',
+        )
+      }
+
+      // Step 6: Prevent duplicate refund request
+      const existingRefund = await Refund.findOne({
+        order: id,
+        user: userId,
+        status: REFUND_STATUS.pending,
+      }).session(session)
+
+      if (existingRefund) {
+        throw new AppError(
+          httpStatus.CONFLICT,
+          'Refund request already submitted for this order',
+        )
+      }
+
+      // Step 7: Create new refund request
+      await Refund.create(
+        [
+          {
+            user: userId,
+            order: order._id,
+            paymentIntentId: payment.paymentIntentId,
+            amount: payment.amount, // full amount (can be made partial later)
+            reason,
+            note: note || 'User cancelled order',
+            status: REFUND_STATUS.pending,
+          },
+        ],
+        { session },
+      )
+    } else {
+      // When authority is 'vendor' → skip refund entirely
+      console.log(
+        `Order ${order._id} has authority 'vendor' — skipping refund steps`,
       )
     }
-
-    // 6. Prevent duplicate refund request
-    const existingRefund = await Refund.findOne({
-      order: id,
-      user: userId,
-      status: REFUND_STATUS.pending,
-    }).session(session)
-
-    if (existingRefund) {
-      throw new AppError(
-        httpStatus.CONFLICT,
-        'Refund request already submitted for this order',
-      )
-    }
-
-    // 7. Create refund request (amount from payment)
-    const refund = await Refund.create(
-      [
-        {
-          user: userId,
-          order: order._id,
-          paymentIntentId: payment.paymentIntentId,
-          amount: payment.amount, // full amount (adjust if partial refund needed)
-          reason,
-          note: note || 'User cancelled order',
-          status: REFUND_STATUS.pending,
-        },
-      ],
-      { session },
-    )
 
     // 8. Update order status to cancelled
     const updatedOrder = await Order.findByIdAndUpdate(
@@ -299,6 +312,7 @@ const cancelOrderFromDB = async (
       { status: ORDER_STATUS.cancelled },
       { new: true, session },
     )
+
     if (!updatedOrder) {
       throw new AppError(
         httpStatus.INTERNAL_SERVER_ERROR,
