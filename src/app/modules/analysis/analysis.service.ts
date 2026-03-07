@@ -19,36 +19,37 @@ import {
 import mongoose from 'mongoose'
 import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
 import { Reviews } from '../review/review.models'
+import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 
 const adminAnalysisData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const { order_year, subscription_year, booking_year } = query;
+  const { order_year, subscription_year, booking_year } = query
 
-  const admin = await User.findById(userId);
+  const admin = await User.findById(userId)
   if (!admin || admin?.isDeleted || admin.role !== USER_ROLE.admin) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Admin not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Admin not found!')
   }
 
   const selectedOrderYear = order_year
     ? parseInt(order_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear();
+    : new Date().getFullYear()
 
   const selectedSubscriptionYear = subscription_year
     ? parseInt(subscription_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear();
+    : new Date().getFullYear()
 
   const selectedBookingYear = booking_year
     ? parseInt(booking_year as string, 10) || new Date().getFullYear()
-    : new Date().getFullYear();
+    : new Date().getFullYear()
 
   // 1. Total active users
   const totalUserCount = await User.countDocuments({
     role: USER_ROLE.user,
     status: USER_STATUS.active,
     isDeleted: false,
-  });
+  })
 
   // 2. Average booking value (from paid orders)
   const avgBookingResult = await Payment.aggregate([
@@ -65,15 +66,15 @@ const adminAnalysisData = async (
         avgAmount: { $avg: '$amount' },
       },
     },
-  ]);
+  ])
 
-  const avgBookingValue = Math.round(avgBookingResult[0]?.avgAmount || 0);
+  const avgBookingValue = Math.round(avgBookingResult[0]?.avgAmount || 0)
 
   // 3. Active subscription count
   const activeSubscriptionCount = await Subscription.countDocuments({
     status: SUBSCRIPTION_STATUS.active,
     isDeleted: false,
-  });
+  })
 
   // 4. Total earning (all paid payments)
   const totalEarningResult = await Payment.aggregate([
@@ -89,23 +90,25 @@ const adminAnalysisData = async (
         total: { $sum: '$amount' },
       },
     },
-  ]);
+  ])
 
-  const totalEarning = totalEarningResult[0]?.total || 0;
+  const totalEarning = totalEarningResult[0]?.total || 0
 
   // 5. Unified earning overview (single array with planner, vendor, and total per month)
-  const earningOverviewRaw = await getEarningOverview(selectedOrderYear);
+  const earningOverviewRaw = await getEarningOverview(selectedOrderYear)
 
   // Transform into single array of objects
-  const earningOverview = earningOverviewRaw.map(item => ({
+  const earningOverview = earningOverviewRaw.map((item) => ({
     month: item.month,
     planner: Math.round(item.planerEarning),
     vendor: Math.round(item.vendorEarning),
     total: Math.round(item.totalEarning),
-  }));
+  }))
 
   // 6. Subscription earning overview (monthly)
-  const subscriptionEarningOverview = await subscriptionEarning(selectedSubscriptionYear);
+  const subscriptionEarningOverview = await subscriptionEarning(
+    selectedSubscriptionYear,
+  )
 
   // 7. Booking overview (percentage by status)
   const bookingOverviewResult = await Order.aggregate([
@@ -141,23 +144,23 @@ const adminAnalysisData = async (
       },
     },
     { $sort: { percentage: -1 } },
-  ]);
+  ])
 
   const bookingOverview = bookingOverviewResult.reduce((acc, curr) => {
-    acc[curr.status] = Math.round(curr.percentage);
-    return acc;
-  }, {});
+    acc[curr.status] = Math.round(curr.percentage)
+    return acc
+  }, {})
 
   return {
     totalUserCount,
     avgBookingValue,
     activeSubscriptionCount,
     totalEarning,
-    earningOverview,                     // ← Now a single array with planner, vendor, total
+    earningOverview, // ← Now a single array with planner, vendor, total
     subscriptionEarningOverview,
     bookingOverview,
-  };
-};
+  }
+}
 
 const planerAnalysisRevenue = async (
   userId: string,
@@ -419,13 +422,14 @@ const vendorAnalysisData = async (
 
   // Fill all 12 months with 0 if missing
   const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
-    const rawAmount = monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0;
-    const afterCommission = Math.round(rawAmount * 0.97); // 3% commission deducted
+    const rawAmount =
+      monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0
+    const afterCommission = Math.round(rawAmount * 0.97) // 3% commission deducted
     return {
       month: i + 1,
       amount: afterCommission,
-    };
-  });
+    }
+  })
 
   // ──────────────────────────────────────────────
   // 2. clientSatisfaction: Monthly review count
@@ -563,22 +567,31 @@ const planerLeadsData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!')
   }
 
-  const tab = (query.tab as string)?.toLowerCase() || 'new';
-  const page = parseInt(query.page as string) || 1;
-  const limit = parseInt(query.limit as string) || 10;
-  const skip = (page - 1) * limit;
+  // Subscription check: only Pro or Elite can access leads data
+  const { level } = await checkSubscriptionPermission(userId, 'leadInsights')
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Leads insights are only available in Pro or Elite plans. Please upgrade your subscription to view detailed lead data.',
+    )
+  }
+
+  const tab = (query.tab as string)?.toLowerCase() || 'new'
+  const page = parseInt(query.page as string) || 1
+  const limit = parseInt(query.limit as string) || 10
+  const skip = (page - 1) * limit
 
   // Correct base condition: planner is the sender (placed the order), authority is client
   const baseMatch = {
-    sender: new mongoose.Types.ObjectId(userId),          // Planner is the sender
-    authority: ORDER_AUTHORITY.client,                    // Order received from client
+    sender: new mongoose.Types.ObjectId(userId), // Planner is the sender
+    authority: ORDER_AUTHORITY.client, // Order received from client
     isDeleted: false,
-  };
+  }
 
   // ──────────────────────────────────────────────
   // 1. New Leads: First-time clients (unique receivers with exactly 1 order)
@@ -587,16 +600,16 @@ const planerLeadsData = async (
     { $match: { ...baseMatch } },
     {
       $group: {
-        _id: '$receiver',           // Group by client (receiver)
+        _id: '$receiver', // Group by client (receiver)
         orderCount: { $sum: 1 },
         firstOrder: { $min: '$createdAt' },
       },
     },
     { $match: { orderCount: 1 } },
     { $count: 'total' },
-  ]);
+  ])
 
-  const newLeadsCount = newLeadsAgg[0]?.total || 0;
+  const newLeadsCount = newLeadsAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 2. Contracted: Clients with at least one pending/running/completed order
@@ -605,7 +618,13 @@ const planerLeadsData = async (
     {
       $match: {
         ...baseMatch,
-        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+        status: {
+          $in: [
+            ORDER_STATUS.pending,
+            ORDER_STATUS.running,
+            ORDER_STATUS.completed,
+          ],
+        },
       },
     },
     {
@@ -614,9 +633,9 @@ const planerLeadsData = async (
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const contractedCount = contractedAgg[0]?.total || 0;
+  const contractedCount = contractedAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 3. Qualified: Clients with at least one running/completed order
@@ -634,9 +653,9 @@ const planerLeadsData = async (
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const qualifiedCount = qualifiedAgg[0]?.total || 0;
+  const qualifiedCount = qualifiedAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 4. Left: Clients whose ALL orders are cancelled/denied/refunded
@@ -653,20 +672,36 @@ const planerLeadsData = async (
     {
       $match: {
         $and: [
-          { statuses: { $nin: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] } },
-          { statuses: { $in: [ORDER_STATUS.cancelled, ORDER_STATUS.denied, ORDER_STATUS.refunded] } },
+          {
+            statuses: {
+              $nin: [
+                ORDER_STATUS.pending,
+                ORDER_STATUS.running,
+                ORDER_STATUS.completed,
+              ],
+            },
+          },
+          {
+            statuses: {
+              $in: [
+                ORDER_STATUS.cancelled,
+                ORDER_STATUS.denied,
+                ORDER_STATUS.refunded,
+              ],
+            },
+          },
         ],
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const leftCount = leftAgg[0]?.total || 0;
+  const leftCount = leftAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 5. Lead List — filtered by tab
   // ──────────────────────────────────────────────
-  let matchFilter: any = { ...baseMatch };
+  let matchFilter: any = { ...baseMatch }
 
   switch (tab) {
     case 'new':
@@ -676,28 +711,34 @@ const planerLeadsData = async (
         { $group: { _id: '$receiver', count: { $sum: 1 } } },
         { $match: { count: 1 } },
         { $project: { _id: 0, receiver: '$_id' } },
-      ]).then(r => r.map(s => s.receiver));
+      ]).then((r) => r.map((s) => s.receiver))
 
-      matchFilter.receiver = { $in: firstTimeReceivers };
-      break;
+      matchFilter.receiver = { $in: firstTimeReceivers }
+      break
 
     case 'contacted':
       // Has at least one pending/running/completed
       const contactedReceivers = await Order.distinct('receiver', {
         ...baseMatch,
-        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
-      });
-      matchFilter.receiver = { $in: contactedReceivers };
-      break;
+        status: {
+          $in: [
+            ORDER_STATUS.pending,
+            ORDER_STATUS.running,
+            ORDER_STATUS.completed,
+          ],
+        },
+      })
+      matchFilter.receiver = { $in: contactedReceivers }
+      break
 
     case 'qualified':
       // Has at least one running/completed
       const qualifiedReceivers = await Order.distinct('receiver', {
         ...baseMatch,
         status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
-      });
-      matchFilter.receiver = { $in: qualifiedReceivers };
-      break;
+      })
+      matchFilter.receiver = { $in: qualifiedReceivers }
+      break
 
     case 'cancel':
       // Only cancelled/denied/refunded
@@ -709,7 +750,16 @@ const planerLeadsData = async (
             hasActive: {
               $sum: {
                 $cond: [
-                  { $in: ['$status', [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed]] },
+                  {
+                    $in: [
+                      '$status',
+                      [
+                        ORDER_STATUS.pending,
+                        ORDER_STATUS.running,
+                        ORDER_STATUS.completed,
+                      ],
+                    ],
+                  },
                   1,
                   0,
                 ],
@@ -719,17 +769,19 @@ const planerLeadsData = async (
         },
         { $match: { hasActive: 0 } },
         { $project: { _id: 0, receiver: '$_id' } },
-      ]).then(r => r.map(s => s.receiver));
+      ]).then((r) => r.map((s) => s.receiver))
 
-      matchFilter.receiver = { $in: cancelReceivers };
-      break;
+      matchFilter.receiver = { $in: cancelReceivers }
+      break
 
     default:
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value')
   }
 
   const leadList = await Order.find(matchFilter)
-    .select('title type shortDescription startDate address location locationUrl receiver sender')
+    .select(
+      'title type shortDescription startDate address location locationUrl receiver sender',
+    )
     .populate({
       path: 'receiver',
       select: 'name photoUrl',
@@ -737,9 +789,9 @@ const planerLeadsData = async (
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .lean();
+    .lean()
 
-  const totalLeads = await Order.countDocuments(matchFilter);
+  const totalLeads = await Order.countDocuments(matchFilter)
 
   return {
     meta: {
@@ -755,29 +807,38 @@ const planerLeadsData = async (
       left: leftCount,
       leadList,
     },
-  };
-};
+  }
+}
 
 const vendorLeadsData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
   }
 
-  const tab = (query.tab as string)?.toLowerCase() || 'new'; // default to 'new'
-  const page = parseInt(query.page as string) || 1;
-  const limit = parseInt(query.limit as string) || 10;
-  const skip = (page - 1) * limit;
+  // Subscription check: only Pro or Elite can access leads data
+  const { level } = await checkSubscriptionPermission(userId, 'leadInsights')
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Leads insights are only available in Pro or Elite plans. Please upgrade your subscription to view detailed lead data.',
+    )
+  }
+
+  const tab = (query.tab as string)?.toLowerCase() || 'new' // default to 'new'
+  const page = parseInt(query.page as string) || 1
+  const limit = parseInt(query.limit as string) || 10
+  const skip = (page - 1) * limit
 
   // Base match: vendor is sender + authority is vendor
   const baseMatch = {
     sender: new mongoose.Types.ObjectId(userId),
     authority: ORDER_AUTHORITY.vendor,
     isDeleted: false,
-  };
+  }
 
   // ──────────────────────────────────────────────
   // 1. New Leads: unique receivers (planners) with exactly 1 order (first-time collaboration)
@@ -793,9 +854,9 @@ const vendorLeadsData = async (
     },
     { $match: { orderCount: 1 } },
     { $count: 'total' },
-  ]);
+  ])
 
-  const newLeadsCount = newLeadsAgg[0]?.total || 0;
+  const newLeadsCount = newLeadsAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 2. Contracted: unique planners with at least one pending/running/completed order
@@ -804,7 +865,13 @@ const vendorLeadsData = async (
     {
       $match: {
         ...baseMatch,
-        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
+        status: {
+          $in: [
+            ORDER_STATUS.pending,
+            ORDER_STATUS.running,
+            ORDER_STATUS.completed,
+          ],
+        },
       },
     },
     {
@@ -813,9 +880,9 @@ const vendorLeadsData = async (
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const contractedCount = contractedAgg[0]?.total || 0;
+  const contractedCount = contractedAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 3. Qualified: unique planners with at least one running/completed order
@@ -833,9 +900,9 @@ const vendorLeadsData = async (
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const qualifiedCount = qualifiedAgg[0]?.total || 0;
+  const qualifiedCount = qualifiedAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 4. Left: unique planners whose ALL orders are cancelled/denied/refunded
@@ -852,20 +919,36 @@ const vendorLeadsData = async (
     {
       $match: {
         $and: [
-          { statuses: { $nin: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] } },
-          { statuses: { $in: [ORDER_STATUS.cancelled, ORDER_STATUS.denied, ORDER_STATUS.refunded] } },
+          {
+            statuses: {
+              $nin: [
+                ORDER_STATUS.pending,
+                ORDER_STATUS.running,
+                ORDER_STATUS.completed,
+              ],
+            },
+          },
+          {
+            statuses: {
+              $in: [
+                ORDER_STATUS.cancelled,
+                ORDER_STATUS.denied,
+                ORDER_STATUS.refunded,
+              ],
+            },
+          },
         ],
       },
     },
     { $count: 'total' },
-  ]);
+  ])
 
-  const leftCount = leftAgg[0]?.total || 0;
+  const leftCount = leftAgg[0]?.total || 0
 
   // ──────────────────────────────────────────────
   // 5. Lead List — filtered by tab (orders where vendor is sender)
   // ──────────────────────────────────────────────
-  let matchFilter: any = { ...baseMatch };
+  let matchFilter: any = { ...baseMatch }
 
   switch (tab) {
     case 'new':
@@ -875,28 +958,34 @@ const vendorLeadsData = async (
         { $group: { _id: '$receiver', count: { $sum: 1 } } },
         { $match: { count: 1 } },
         { $project: { _id: 0, receiver: '$_id' } },
-      ]).then(r => r.map(s => s.receiver));
+      ]).then((r) => r.map((s) => s.receiver))
 
-      matchFilter.receiver = { $in: firstTimeReceivers };
-      break;
+      matchFilter.receiver = { $in: firstTimeReceivers }
+      break
 
     case 'contacted':
       // Has at least one pending/running/completed
       const contactedReceivers = await Order.distinct('receiver', {
         ...baseMatch,
-        status: { $in: [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed] },
-      });
-      matchFilter.receiver = { $in: contactedReceivers };
-      break;
+        status: {
+          $in: [
+            ORDER_STATUS.pending,
+            ORDER_STATUS.running,
+            ORDER_STATUS.completed,
+          ],
+        },
+      })
+      matchFilter.receiver = { $in: contactedReceivers }
+      break
 
     case 'qualified':
       // Has at least one running/completed
       const qualifiedReceivers = await Order.distinct('receiver', {
         ...baseMatch,
         status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
-      });
-      matchFilter.receiver = { $in: qualifiedReceivers };
-      break;
+      })
+      matchFilter.receiver = { $in: qualifiedReceivers }
+      break
 
     case 'cancel':
       // Only cancelled/denied/refunded
@@ -911,7 +1000,11 @@ const vendorLeadsData = async (
                   {
                     $in: [
                       '$status',
-                      [ORDER_STATUS.pending, ORDER_STATUS.running, ORDER_STATUS.completed],
+                      [
+                        ORDER_STATUS.pending,
+                        ORDER_STATUS.running,
+                        ORDER_STATUS.completed,
+                      ],
                     ],
                   },
                   1,
@@ -923,17 +1016,19 @@ const vendorLeadsData = async (
         },
         { $match: { hasActive: 0 } },
         { $project: { _id: 0, receiver: '$_id' } },
-      ]).then(r => r.map(s => s.receiver));
+      ]).then((r) => r.map((s) => s.receiver))
 
-      matchFilter.receiver = { $in: cancelReceivers };
-      break;
+      matchFilter.receiver = { $in: cancelReceivers }
+      break
 
     default:
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value')
   }
 
   const leadList = await Order.find(matchFilter)
-    .select('title type shortDescription startDate address location locationUrl receiver')
+    .select(
+      'title type shortDescription startDate address location locationUrl receiver',
+    )
     .populate({
       path: 'receiver',
       select: 'name photoUrl',
@@ -941,9 +1036,9 @@ const vendorLeadsData = async (
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .lean();
+    .lean()
 
-  const totalLeads = await Order.countDocuments(matchFilter);
+  const totalLeads = await Order.countDocuments(matchFilter)
 
   return {
     meta: {
@@ -959,8 +1054,8 @@ const vendorLeadsData = async (
       left: leftCount,
       leadList,
     },
-  };
-};
+  }
+}
 
 export const AnalysisService = {
   adminAnalysisData,
@@ -969,5 +1064,5 @@ export const AnalysisService = {
   planerAnalysisTopVendor,
   vendorAnalysisData,
   planerLeadsData,
-  vendorLeadsData
+  vendorLeadsData,
 }

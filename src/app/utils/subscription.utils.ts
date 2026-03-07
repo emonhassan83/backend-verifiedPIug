@@ -17,7 +17,7 @@ export const SUBSCRIPTION_FEATURES = {
     canGetVerifiedBadge: false,
     featuredPlacement: 0,
     analyticsLevel: 'basic',
-    teamAccess: false,
+    leadInsights: false,
   },
   pro: {
     name: 'Pro',
@@ -26,7 +26,7 @@ export const SUBSCRIPTION_FEATURES = {
     canGetVerifiedBadge: true,
     featuredPlacement: 1, // per month
     analyticsLevel: 'full',
-    teamAccess: false,
+    leadInsights: true,
   },
   elite: {
     name: 'Elite (Planner Pro / Agency)',
@@ -35,7 +35,7 @@ export const SUBSCRIPTION_FEATURES = {
     canGetVerifiedBadge: true,
     featuredPlacement: 3, // per month
     analyticsLevel: 'advanced',
-    teamAccess: true,
+    leadInsights: true,
   },
 } as const
 
