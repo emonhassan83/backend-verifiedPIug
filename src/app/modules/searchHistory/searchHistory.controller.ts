@@ -4,7 +4,7 @@ import sendResponse from '../../utils/sendResponse'
 import { SearchHistoryService } from './searchHistory.service'
 
 const searchData = catchAsync(async (req, res) => {
-  const result = await SearchHistoryService.searchDataIntoDB(req.query)
+  const result = await SearchHistoryService.searchDataIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,

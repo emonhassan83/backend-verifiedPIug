@@ -6,10 +6,18 @@ import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { Service } from '../service/service.models'
-import { SERVICE_STATUS } from '../service/service.constants'
+import { SERVICE_AUTHORITY, SERVICE_STATUS } from '../service/service.constants'
 import { Category } from '../categories/categories.models'
 
-const searchDataIntoDB = async (query: Record<string, unknown>) => {
+const searchDataIntoDB = async (
+  query: Record<string, unknown>,
+  userId: string,
+) => {
+  const user = await User.findById(userId).select('role').lean()
+  if (!user || user.isDeleted) {
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
+  }
+
   const { searchTerm } = query
 
   if (
@@ -35,9 +43,30 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
     .select('_id name photoUrl')
     .lean()
 
-  // 2. Search service
-  const service = await Service.find({
+  // 1.5. Search Vendor Profiles (role: vendor, active)
+  const vendor = await User.find({
+    role: USER_ROLE.vendor,
+    status: USER_STATUS.active,
     isDeleted: false,
+    $or: [{ name: { $regex: searchRegex } }],
+  })
+    .select('_id name photoUrl')
+    .lean()
+
+  // 2. Search planer service
+  const planerService = await Service.find({
+    isDeleted: false,
+    authority: SERVICE_AUTHORITY.planer, // exclude planner-only services
+    status: SERVICE_STATUS.active,
+    $or: [{ title: { $regex: searchRegex } }],
+  })
+    .select('title images')
+    .lean()
+
+  // 2. Search vendor service
+  const vendorService = await Service.find({
+    isDeleted: false,
+    authority: SERVICE_AUTHORITY.vendor, // exclude vendor-only services
     status: SERVICE_STATUS.active,
     $or: [{ title: { $regex: searchRegex } }],
   })
@@ -52,8 +81,8 @@ const searchDataIntoDB = async (query: Record<string, unknown>) => {
     .lean()
 
   return {
-    planner: planner,
-    service: service,
+    user: user?.role === USER_ROLE.planer ? vendor : planner,
+    service: user?.role === USER_ROLE.planer ? vendorService : planerService,
     categories: categories,
   }
 }
@@ -126,46 +155,49 @@ const getSuggestData = async (userId: string) => {
 
 // Create a new SearchHistory
 const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
-  const { modelType, refId } = payload;
+  const { modelType, refId } = payload
 
   // 1. User validation
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!');
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found or deleted!')
   }
 
   // 2. Reference validation with switch (clean & performant)
-  let isValidRef = false;
+  let isValidRef = false
   switch (modelType) {
     case SEARCH_MODEL_TYPE.User:
       isValidRef = !!(await User.exists({
         _id: refId,
         status: USER_STATUS.active,
         isDeleted: false,
-      }));
-      break;
+      }))
+      break
 
     case SEARCH_MODEL_TYPE.Service:
       isValidRef = !!(await Service.exists({
         _id: refId,
         status: SERVICE_STATUS.active,
         isDeleted: false,
-      }));
-      break;
+      }))
+      break
 
     case SEARCH_MODEL_TYPE.Category:
       isValidRef = !!(await Category.exists({
         _id: refId,
         isDeleted: false,
-      }));
-      break;
+      }))
+      break
 
     default:
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type!');
+      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid model type!')
   }
 
   if (!isValidRef) {
-    throw new AppError(httpStatus.NOT_FOUND, `Invalid ${modelType} reference ID!`);
+    throw new AppError(
+      httpStatus.NOT_FOUND,
+      `Invalid ${modelType} reference ID!`,
+    )
   }
 
   // 3. Upsert search history (prevents duplicates + updates timestamp)
@@ -173,18 +205,18 @@ const insertIntoDB = async (payload: TSearchHistory, userId: string) => {
     { userId, modelType, refId },
     {
       $setOnInsert: { createdAt: new Date() }, // only on insert
-      $set: { updatedAt: new Date() },         // always update timestamp
+      $set: { updatedAt: new Date() }, // always update timestamp
     },
     {
       upsert: true,
-      new: true,         // return the new/updated document
+      new: true, // return the new/updated document
       setDefaultsOnInsert: true,
-    }
-  );
+    },
+  )
 
   // 4. Return clean object
   return history
-};
+}
 
 // Get all SearchHistory
 const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
@@ -251,9 +283,12 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   }
 
   const SearchHistoryModel = new QueryBuilder(
-    SearchHistory.find().populate([
-      { path: 'refId', select: '_id name title photoUrl images logo' },
-    ]).select('modelType refId createdAt').lean(),
+    SearchHistory.find()
+      .populate([
+        { path: 'refId', select: '_id name title photoUrl images logo' },
+      ])
+      .select('modelType refId createdAt')
+      .lean(),
     query,
   )
     .search([''])
