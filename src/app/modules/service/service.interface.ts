@@ -23,6 +23,7 @@ export interface TService {
   isFeatured: boolean
   status: TServiceStatus
   isDeleted?: boolean
+  featuredAt?: Date
 }
 
 export type TServiceModel = Model<TService, Record<string, unknown>>

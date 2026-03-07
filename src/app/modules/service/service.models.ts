@@ -83,6 +83,9 @@ const serviceSchema = new Schema<TService>(
       type: Boolean,
       default: false,
     },
+    featuredAt: {
+      type: Date,
+    },
   },
   { timestamps: true },
 )
