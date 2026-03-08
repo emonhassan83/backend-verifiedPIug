@@ -16,7 +16,7 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
 
 const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
   req.query['project'] = req.params.projectId
-  const result = await TaskService.getAllIntoDB(req.query)
+  const result = await TaskService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,

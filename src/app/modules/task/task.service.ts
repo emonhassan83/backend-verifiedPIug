@@ -5,21 +5,41 @@ import { User } from '../user/user.model'
 import { Project } from '../project/project.models'
 import { Task } from './task.models'
 import QueryBuilder from '../../builder/QueryBuilder'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
+import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 
-// Create a new Project
+// Create a new task record
 const insertIntoDB = async (userId: string, payload: TTask) => {
   const { project: projectId } = payload
 
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
+  // 1. Validate planner
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
   }
 
+  // 2. Subscription check: Only Elite can create tasks
+  const { level } = await checkSubscriptionPermission(userId, 'teamAccess')
+  if (level !== 'elite') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Task creation is only available in the Elite (Planner Pro / Agency) plan. ' +
+        'Please upgrade your subscription',
+    )
+  }
+
+  // 3. Validate project
   const project = await Project.findById(projectId)
   if (!project || project?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Project data not found')
   }
 
+  // 4. Create task
   const result = await Task.create(payload)
   if (!result) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Task creation failed')
@@ -28,16 +48,36 @@ const insertIntoDB = async (userId: string, payload: TTask) => {
   return result
 }
 
-// Get all assign project data
-const getAllIntoDB = async (query: Record<string, any>) => {
-  const TaskModel = new QueryBuilder(Task.find(), query)
+// Get all task data
+const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
+  }
+
+  // Subscription check: Only Elite can create tasks
+  const { level } = await checkSubscriptionPermission(userId, 'teamAccess')
+  if (level !== 'elite') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Task creation is only available in the Elite (Planner Pro / Agency) plan. ' +
+        'Please upgrade your subscription',
+    )
+  }
+
+  const taskModel = new QueryBuilder(Task.find(), query)
     .search([''])
     .filter()
     .paginate()
     .sort()
     .fields()
 
-  const taskList = await TaskModel.modelQuery
+  const taskList = await taskModel.modelQuery
 
   // Calculate statistics
   const totalTasks = taskList.length
@@ -47,7 +87,7 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     totalTasks > 0 ? Math.round((completedTask / totalTasks) * 100) : 0
 
   // Get meta data
-  const meta = await TaskModel.countTotal()
+  const meta = await taskModel.countTotal()
 
   return {
     meta,
@@ -93,7 +133,6 @@ const updateIntoDB = async (id: string, payload: Partial<TTask>) => {
 // Toggle task status
 const changedStatusIntoDB = async (id: string) => {
   const task = await Task.findById(id)
-
   if (!task) {
     throw new AppError(httpStatus.NOT_FOUND, 'Task not found!')
   }

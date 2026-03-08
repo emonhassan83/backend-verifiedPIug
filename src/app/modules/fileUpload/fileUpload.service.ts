@@ -7,14 +7,32 @@ import { User } from '../user/user.model'
 import { TFile } from './fileUpload.interface'
 import { Project } from '../project/project.models'
 import { bytesToMB } from '../../utils/fileUtils'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
+import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 
 // Create a new File
 const insertIntoDB = async (userId: string, payload: TFile, files: any) => {
   const { project: projectId } = payload
 
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+  // Validate planner
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
+  }
+
+  // 2. Subscription check: Only Elite can create tasks
+  const { level } = await checkSubscriptionPermission(userId, 'teamAccess')
+  if (level !== 'elite') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'File upload is only available in the Elite (Planner Pro / Agency) plan. ' +
+        'Please upgrade your subscription',
+    )
   }
 
   const project = await Project.findById(projectId)
@@ -55,16 +73,37 @@ const insertIntoDB = async (userId: string, payload: TFile, files: any) => {
 }
 
 // Get all File
-const getAllIntoDB = async (query: Record<string, any>) => {
-  const FileModel = new QueryBuilder(File.find(), query)
+const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
+    // 1. Validate planner
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
+  }
+
+  // 2. Subscription check: Only Elite can create tasks
+  const { level } = await checkSubscriptionPermission(userId, 'teamAccess')
+  if (level !== 'elite') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Task creation is only available in the Elite (Planner Pro / Agency) plan. ' +
+        'Please upgrade your subscription',
+    )
+  }
+
+  const fileModel = new QueryBuilder(File.find(), query)
     .search([''])
     .filter()
     .paginate()
     .sort()
     .fields()
 
-  const data = await FileModel.modelQuery
-  const meta = await FileModel.countTotal()
+  const data = await fileModel.modelQuery
+  const meta = await fileModel.countTotal()
   return {
     data,
     meta,

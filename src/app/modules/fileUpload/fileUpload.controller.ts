@@ -17,7 +17,7 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
 // Get all File
 const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
   req.query['project'] = req.params.projectId
-  const result = await FileService.getAllIntoDB(req.query)
+  const result = await FileService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,

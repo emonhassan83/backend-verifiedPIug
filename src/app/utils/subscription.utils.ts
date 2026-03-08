@@ -18,6 +18,7 @@ export const SUBSCRIPTION_FEATURES = {
     featuredPlacement: 0,
     analyticsLevel: 'basic',
     leadInsights: false,
+    teamAccess: false,
   },
   pro: {
     name: 'Pro',
@@ -27,6 +28,7 @@ export const SUBSCRIPTION_FEATURES = {
     featuredPlacement: 1, // per month
     analyticsLevel: 'full',
     leadInsights: true,
+    teamAccess: false,
   },
   elite: {
     name: 'Elite (Planner Pro / Agency)',
@@ -36,6 +38,7 @@ export const SUBSCRIPTION_FEATURES = {
     featuredPlacement: 3, // per month
     analyticsLevel: 'advanced',
     leadInsights: true,
+    teamAccess: true,
   },
 } as const
 
