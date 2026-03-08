@@ -166,6 +166,23 @@ const planerAnalysisRevenue = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!')
+  }
+
+  // Subscription check: only Pro or Elite can access analysis data
+  const { level } = await checkSubscriptionPermission(
+    userId,
+    'analyticsDashboard',
+  )
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Analysis are only available in Pro or Elite plans. Please upgrade your subscription.',
+    )
+  }
+
   const { event_year, category_year, revenue_year } = query
 
   const selectedEventYear = event_year
@@ -217,6 +234,18 @@ const planerAnalysisEventType = async (userId: string) => {
   const user = await User.findById(userId)
   if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
     throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!')
+  }
+
+  // Subscription check: only Pro or Elite can access analysis data
+  const { level } = await checkSubscriptionPermission(
+    userId,
+    'analyticsDashboard',
+  )
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Analysis is only available in Pro or Elite plans. Please upgrade your subscription.',
+    )
   }
 
   // Get common metadata (eventManaged, activeClient, etc.)
@@ -277,6 +306,23 @@ const planerAnalysisEventType = async (userId: string) => {
 }
 
 const planerAnalysisTopVendor = async (userId: string) => {
+  const user = await User.findById(userId)
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Planner not found!')
+  }
+
+  // Subscription check: only Pro or Elite can access analysis data
+  const { level } = await checkSubscriptionPermission(
+    userId,
+    'analyticsDashboard',
+  )
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Analysis is only available in Pro or Elite plans. Please upgrade your subscription.',
+    )
+  }
+
   const metaData = await planerCommonMeta(userId)
 
   // We are finding planners (receiver) where this vendor (sender) placed orders
@@ -337,6 +383,20 @@ const vendorAnalysisData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
+  const user = await User.findById(userId);
+  if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
+  }
+
+  // Subscription check: only Pro or Elite can access analysis data
+  const { level } = await checkSubscriptionPermission(userId, 'analyticsDashboard');
+  if (level === 'starter') {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Analysis is only available in Pro or Elite plans. Please upgrade your subscription.'
+    );
+  }
+
   const { revenue_year, satisfaction_year, service_year, booking_year } = query
 
   const totalBookingCount = await Order.countDocuments({
@@ -382,11 +442,6 @@ const vendorAnalysisData = async (
   const selectedBookingYear = booking_year
     ? parseInt(booking_year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
-
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
-  }
 
   // ──────────────────────────────────────────────
   // 1. monthlyRevenue: Revenue per month (completed orders)

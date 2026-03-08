@@ -14,7 +14,7 @@ export const SUBSCRIPTION_FEATURES = {
     name: 'Starter (Free)',
     canUploadPortfolio: false,
     canCreateListings: true,
-    canGetVerifiedBadge: false,
+    analyticsDashboard: false,
     featuredPlacement: 0,
     analyticsLevel: 'basic',
     leadInsights: false,
@@ -23,7 +23,7 @@ export const SUBSCRIPTION_FEATURES = {
     name: 'Pro',
     canUploadPortfolio: true,
     canCreateListings: true,
-    canGetVerifiedBadge: true,
+    analyticsDashboard: true,
     featuredPlacement: 1, // per month
     analyticsLevel: 'full',
     leadInsights: true,
@@ -32,7 +32,7 @@ export const SUBSCRIPTION_FEATURES = {
     name: 'Elite (Planner Pro / Agency)',
     canUploadPortfolio: true,
     canCreateListings: true,
-    canGetVerifiedBadge: true,
+    analyticsDashboard: true,
     featuredPlacement: 3, // per month
     analyticsLevel: 'advanced',
     leadInsights: true,
