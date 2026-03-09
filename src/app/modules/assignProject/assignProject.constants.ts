@@ -9,7 +9,7 @@ export const ASSIGNMENT_PAYMENT_STATUS = {
   pending: 'pending',       
   partial: 'partial', 
   paid: 'paid',   
-  refound: 'refound'
+  refund: 'refund'
 } as const;
 
 export type TVendorAssignmentStatus = keyof typeof VENDOR_ASSIGNMENT_STATUS

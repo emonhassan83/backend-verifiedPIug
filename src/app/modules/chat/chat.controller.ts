@@ -21,7 +21,8 @@ const getMyChatList = catchAsync(async (req: Request, res: Response) => {
     statusCode: 200,
     success: true,
     message: 'Chat retrieved successfully',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 

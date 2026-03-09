@@ -8,7 +8,6 @@ export interface TAssignProject {
   assignedBy: Types.ObjectId
   vendorOrder: Types.ObjectId
   serviceType: string[]
-  serviceDescription: string
   agreedAmount: number
   paidAmount: number
   deadline: string

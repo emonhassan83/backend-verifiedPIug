@@ -5,7 +5,7 @@ import { User } from '../user/user.model'
 import { Project } from '../project/project.models'
 import { AssignProject } from './assignProject.models'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { ORDER_AUTHORITY } from '../order/order.constants'
+import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
 import mongoose, { Types } from 'mongoose'
 import { Order } from '../order/order.models'
 import { TVendorAssignmentStatus } from './assignProject.constants'
@@ -17,17 +17,14 @@ import {
   PARTICIPANT_ROLE,
   PARTICIPANT_STATUS,
 } from '../participant/participant.constants'
+import { PROJECT_STATUS } from '../project/project.constants'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
   session.startTransaction()
 
   try {
-    const {
-      project: projectId,
-      vendor: vendorId,
-      vendorOrder: vendorOrderId,
-    } = payload
+    const { project: projectId, vendorOrder: vendorOrderId } = payload
 
     // 1. Requester validation
     const user = await User.findById(userId).session(session)
@@ -35,30 +32,53 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
     }
 
-    // 2. Vendor validation
-    const vendor = await User.findById(vendorId).session(session)
-    if (!vendor || vendor.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found')
+    // 2. Project validation
+    const project = await Project.findById({
+      _id: projectId,
+      status: PROJECT_STATUS.ongoing,
+      isDeleted: false,
+    }).session(session)
+    if (!project) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Project not found or not eligible for assignment',
+      )
     }
 
     // 3. Vendor Order validation
     const order = await Order.findOne({
       _id: vendorOrderId,
       authority: ORDER_AUTHORITY.vendor,
-      receiver: vendorId,
+      status: ORDER_STATUS.running,
       isDeleted: false,
-    }).session(session)
+    })
+      .populate('sender')
+      .session(session)
     if (!order) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Order not found')
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        'Order not found or not eligible for assignment',
+      )
     }
 
-    // 4. Project validation
-    const project = await Project.findById(projectId).session(session)
-    if (!project || project.isDeleted) {
-      throw new AppError(httpStatus.NOT_FOUND, 'Project data not found')
+    // =============================================
+    // NEW CHECK: Prevent duplicate assignment
+    // Check if this vendorOrder is already assigned to this project
+    // =============================================
+    const existingAssignment = await AssignProject.findOne({
+      project: projectId,
+      vendorOrder: vendorOrderId
+    }).session(session)
+
+    if (existingAssignment) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'This vendor order is already assigned to this project. Duplicate assignment is not allowed.',
+      )
     }
 
-    // 5. Assign project creation
+    // 4. Assign project creation
+    payload.vendor = order.sender
     payload.assignedBy = new Types.ObjectId(userId)
     payload.agreedAmount = order.finalAmount
 
@@ -97,7 +117,7 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
     // 2. Check if vendor is already a participant
     const existingParticipant = await Participant.findOne({
       chat: groupChat._id,
-      user: vendorId,
+      user: order.sender,
       isDeleted: false,
     }).session(session)
 
@@ -107,7 +127,7 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
         [
           {
             chat: groupChat._id,
-            user: vendorId,
+            user: order.sender,
             role: PARTICIPANT_ROLE.vendor, // vendor role
             status: PARTICIPANT_STATUS.active,
           },
@@ -123,7 +143,7 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
 
     // Send notification to vendor
     await vendorProjectAssignNotify(
-      vendor,
+      order.sender as any,
       order,
       assignedProject[0].status,
       'bookings',

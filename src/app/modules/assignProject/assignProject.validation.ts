@@ -8,12 +8,8 @@ const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
 
 const createValidationSchema = z.object({
   body: z.object({
-    // Required References (ObjectId as string)
     project: objectIdSchema,
-    vendor: objectIdSchema,
     vendorOrder: objectIdSchema,
-
-    // Service Information
     serviceType: z
       .array(
         z.string({
@@ -21,7 +17,6 @@ const createValidationSchema = z.object({
         }),
       )
       .nonempty('At least one service type is required'),
-    serviceDescription: z.string().optional(),
 
     // Dates
     deadline: z
@@ -32,8 +27,6 @@ const createValidationSchema = z.object({
         message: 'Invalid deadline date format',
       })
       .optional(),
-
-    // Status & Notes
     notes: z.string().optional(),
   }),
 })
@@ -42,7 +35,6 @@ const updateValidationSchema = z.object({
   body: z.object({
     // Optional updates for all fields
     serviceType: z.array(z.string()).optional(),
-    serviceDescription: z.string().optional(),
 
     agreedAmount: z
       .number()

@@ -4,6 +4,8 @@ import { Project } from './project.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
 import { Order } from '../order/order.models'
+import { AssignProject } from '../assignProject/assignProject.models'
+import { Task } from '../task/task.models'
 
 // Create a new Project
 const insertIntoDB = async (userId: string, payload: TProject) => {
@@ -32,16 +34,52 @@ const insertIntoDB = async (userId: string, payload: TProject) => {
 
 // Get Project by ID
 const getAIntoDB = async (id: string) => {
-  const result = await Project.findOne({ order: id }).populate([
-    { path: 'author', select: 'name photoUrl' },
-    { path: 'client', select: 'name photoUrl' },
-    { path: 'order' },
-  ])
-  if (!result || result?.isDeleted) {
+  const project = await Project.findOne({ order: id })
+    .populate([
+      {
+        path: 'client',
+        select: 'name email photoUrl contractNumber address locationUrl',
+      },
+      { path: 'order' },
+    ])
+    .lean()
+
+  if (!project || project?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Project not found')
   }
 
-  return result
+  // 1. totalVendor: Count of assigned vendors for this project
+  const totalVendor = await AssignProject.countDocuments({
+    project: project._id,
+    status: { $in: ['assigned', 'inProgress', 'completed'] }
+  })
+
+  // 2. budgetProgress: Percentage of budget used (expense vs budget)
+  const budgetProgress =
+    project.budget > 0
+      ? Math.min(Math.round((project.expense / project.budget) * 100), 100)
+      : 0
+
+  // 3. taskProgress: Percentage of completed tasks
+  const totalTasks = await Task.countDocuments({
+    project: project._id,
+  })
+
+  const completedTasks = await Task.countDocuments({
+    project: project._id,
+    isCompleted: true,
+  })
+
+  const taskProgress =
+    totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+
+  // Return enriched project data
+  return {
+    ...project,
+    totalVendor,
+    budgetProgress,
+    taskProgress,
+  }
 }
 
 const changeStatusFromDB = async (id: string, payload: any) => {

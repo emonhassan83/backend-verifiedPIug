@@ -12,6 +12,11 @@ const assignProjectSchema = new Schema<TAssignProject>(
       ref: 'Project',
       required: true,
     },
+    vendorOrder: {
+      type: Schema.Types.ObjectId,
+      ref: 'Order',
+      required: true,
+    },
     vendor: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -22,18 +27,9 @@ const assignProjectSchema = new Schema<TAssignProject>(
       ref: 'User',
       required: true,
     },
-    vendorOrder: {
-      type: Schema.Types.ObjectId,
-      ref: 'Order',
-      required: true,
-    },
     serviceType: {
       type: [String],
       required: true,
-    },
-    serviceDescription: {
-      type: String,
-      required: false,
     },
     agreedAmount: {
       type: Number,
