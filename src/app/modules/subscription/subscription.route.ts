@@ -20,13 +20,13 @@ router.patch(
   subscriptionController.updateSubscription,
 )
 
-router.get(
+router.patch(
   '/cancel/:subscriptionId',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   subscriptionController.cancelSubscription,
 )
 
-router.get(
+router.patch(
   '/enable/:subscriptionId',
   auth(USER_ROLE.planer, USER_ROLE.vendor),
   subscriptionController.enableSubscription,

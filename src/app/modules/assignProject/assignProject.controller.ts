@@ -39,16 +39,18 @@ const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-const updateIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await AssignProjectService.updateIntoDB(req.params.id, req.body)
+const compareQuotes = catchAsync(async (req: Request, res: Response) => {
+  const result = await AssignProjectService.compareQuotes(req.params.projectId, req.query, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Project vendor updated successfully',
-    data: result,
+    message: 'Project vendor quotes compared successfully',
+    meta: result.meta,
+    data: result.data,
   })
 })
+
 const updateStatusIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await AssignProjectService.updateStatusIntoDB(req.params.id, req.body)
 
@@ -75,7 +77,7 @@ export const AssignProjectController = {
   insertIntoDB,
   getAllIntoDB,
   getAIntoDB,
-  updateIntoDB,
+  compareQuotes,
   updateStatusIntoDB,
   deleteAIntoDB
 }

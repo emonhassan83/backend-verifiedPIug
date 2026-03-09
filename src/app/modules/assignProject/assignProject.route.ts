@@ -16,21 +16,21 @@ router.post(
 
 router.patch(
   '/status/:id',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  auth(USER_ROLE.planer),
   zodValidationRequest(AssignProjectValidation.changeStatusValidationSchema),
-  AssignProjectController.updateIntoDB,
+  AssignProjectController.updateStatusIntoDB,
 )
 
-router.put(
-  '/:id',
+router.get(
+  '/compare-quotes/:projectId',
   auth(USER_ROLE.planer),
   zodValidationRequest(AssignProjectValidation.updateValidationSchema),
-  AssignProjectController.updateIntoDB,
+  AssignProjectController.compareQuotes,
 )
 
 router.get(
   '/project/:projectId',
-  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  auth(USER_ROLE.planer),
   AssignProjectController.getAllIntoDB,
 )
 

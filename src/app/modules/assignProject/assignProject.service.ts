@@ -18,6 +18,8 @@ import {
   PARTICIPANT_STATUS,
 } from '../participant/participant.constants'
 import { PROJECT_STATUS } from '../project/project.constants'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
+import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -67,7 +69,7 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
     // =============================================
     const existingAssignment = await AssignProject.findOne({
       project: projectId,
-      vendorOrder: vendorOrderId
+      vendorOrder: vendorOrderId,
     }).session(session)
 
     if (existingAssignment) {
@@ -167,11 +169,11 @@ const getAllIntoDB = async (query: Record<string, any>) => {
     AssignProject.find().populate([
       {
         path: 'vendor',
-        select: 'name email photoUrl contractNumber ',
+        select: 'name email photoUrl contractNumber address locationUrl',
       },
       {
         path: 'vendorOrder',
-        select: 'title address locationUrl',
+        select: 'title shortDescription address locationUrl',
       },
     ]),
     query,
@@ -212,23 +214,77 @@ const getAIntoDB = async (id: string) => {
 }
 
 // Update assign project
-const updateIntoDB = async (id: string, payload: Partial<TAssignProject>) => {
-  const project = await AssignProject.findById(id)
-  if (!project) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Project assign vendor not found!')
+const compareQuotes = async (
+  id: string,
+  query: Record<string, any>,
+  userId: string,
+) => {
+  // Validate planner
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
   }
 
-  const result = await AssignProject.findByIdAndUpdate(id, payload, {
-    new: true,
-  })
-  if (!result) {
+  // 2. Subscription check: Only Elite can create tasks
+  const { level } = await checkSubscriptionPermission(userId, 'teamAccess')
+  if (level !== 'elite') {
     throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Assign vendor record not updated!',
+      httpStatus.FORBIDDEN,
+      'File upload is only available in the Elite (Planner Pro / Agency) plan. ' +
+        'Please upgrade your subscription',
     )
   }
 
-  return result
+  // Validate project record
+  const project = await Project.findOne({
+    _id: id,
+    author: userId,
+    isDeleted: false,
+  })
+  if (!project) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
+  }
+
+  const budgetProgress =
+    project.budget > 0
+      ? Math.min(Math.round((project.expense / project.budget) * 100), 100)
+      : 0
+
+  const assignProjectModel = new QueryBuilder(
+    // @ts-ignore
+    AssignProject.find({ project: id })
+      .populate([
+        {
+          path: 'vendor',
+          select: 'name photoUrl',
+        },
+      ])
+      .select('vendor agreedAmount serviceType createdAt'),
+    query,
+  )
+    .search([''])
+    .filter()
+    .paginate()
+    .sort()
+    .fields()
+
+  const data = await assignProjectModel.modelQuery
+  const meta = await assignProjectModel.countTotal()
+
+  return {
+    data: {
+      projectBudget: project.budget,
+      projectExpense: project.expense,
+      budgetProgress,
+      vendorList: data,
+    },
+    meta,
+  }
 }
 
 // Update assign project status
@@ -286,7 +342,7 @@ export const AssignProjectService = {
   insertIntoDB,
   getAllIntoDB,
   getAIntoDB,
-  updateIntoDB,
+  compareQuotes,
   updateStatusIntoDB,
   deleteAIntoDB,
 }

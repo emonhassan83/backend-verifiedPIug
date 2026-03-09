@@ -3,13 +3,13 @@ import catchAsync from '../../utils/catchAsync'
 import { ProjectService } from './project.service'
 import sendResponse from '../../utils/sendResponse'
 
-const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await ProjectService.insertIntoDB(req.user._id, req.body)
+const projectPaymentOverview = catchAsync(async (req: Request, res: Response) => {
+  const result = await ProjectService.projectPaymentOverview(req.params.projectId, req.user._id, req.query)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Project created successfully',
+    message: 'Project payment overview retrieved successfully',
     data: result,
   })
 })
@@ -38,7 +38,7 @@ const changeStatus = catchAsync(async (req: Request, res: Response) => {
 })
 
 export const ProjectController = {
-  insertIntoDB,
+  projectPaymentOverview,
   getAIntoDB,
   changeStatus,
 }

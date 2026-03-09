@@ -1,35 +1,68 @@
 import httpStatus from 'http-status'
-import { TProject } from './project.interface'
 import { Project } from './project.models'
 import AppError from '../../errors/AppError'
 import { User } from '../user/user.model'
-import { Order } from '../order/order.models'
 import { AssignProject } from '../assignProject/assignProject.models'
 import { Task } from '../task/task.models'
+import { USER_ROLE, USER_STATUS } from '../user/user.constant'
+import QueryBuilder from '../../builder/QueryBuilder'
 
 // Create a new Project
-const insertIntoDB = async (userId: string, payload: TProject) => {
-  const { order: orderId } = payload
-
-  const user = await User.findById(userId)
-  if (!user || user?.isDeleted) {
+const projectPaymentOverview = async (id: string, userId: string, query: Record<string, any>) => {
+  const user = await User.findOne({
+    _id: userId,
+    role: USER_ROLE.planer,
+    status: USER_STATUS.active,
+    isDeleted: false,
+  })
+  if (!user) {
     throw new AppError(httpStatus.NOT_FOUND, 'Your profile not found')
   }
 
-  const order = await Order.findById(orderId)
-  if (!order || order?.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Order data not found')
+  // Validate project record
+  const project = await Project.findOne({
+    _id: id,
+    author: userId,
+    isDeleted: false,
+  })
+  if (!project) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
   }
 
-  // Assign to payload
-  payload.author = user._id
+  // Get total paid amount from AssignProject
+   const AssignProjectModel = new QueryBuilder(
+    AssignProject.find({ project: id }).populate([
+      {
+        path: 'vendor',
+        select: 'name email photoUrl contractNumber address locationUrl',
+      },
+      {
+        path: 'vendorOrder',
+        select: 'title',
+      },
+    ]),
+    query,
+  )
+    .search([''])
+    .filter()
+    .paginate()
+    .sort()
+    .fields()
 
-  const result = await Project.create(payload)
-  if (!result) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'Project creation failed')
+  const data = await AssignProjectModel.modelQuery
+  const meta = await AssignProjectModel.countTotal()
+
+  return {
+    data: {
+      totalReceived: 0,
+      pendingPayment: data.reduce((sum, ap) => sum + (ap.agreedAmount || 0), 0),
+      vendorPayment: 0,
+      totalSaved: 0,
+      payments: data,
+    },
+    meta,
   }
 
-  return result
 }
 
 // Get Project by ID
@@ -51,7 +84,7 @@ const getAIntoDB = async (id: string) => {
   // 1. totalVendor: Count of assigned vendors for this project
   const totalVendor = await AssignProject.countDocuments({
     project: project._id,
-    status: { $in: ['assigned', 'inProgress', 'completed'] }
+    status: { $in: ['assigned', 'inProgress', 'completed'] },
   })
 
   // 2. budgetProgress: Percentage of budget used (expense vs budget)
@@ -77,7 +110,7 @@ const getAIntoDB = async (id: string) => {
   return {
     ...project,
     totalVendor,
-    budgetProgress,
+    // budgetProgress,
     taskProgress,
   }
 }
@@ -106,7 +139,7 @@ const changeStatusFromDB = async (id: string, payload: any) => {
 }
 
 export const ProjectService = {
-  insertIntoDB,
+  projectPaymentOverview,
   getAIntoDB,
   changeStatusFromDB,
 }
