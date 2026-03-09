@@ -11,6 +11,7 @@ export type TWithdraw = {
   recipientCode?: string
   note: string
   status: TWithdrawStatus
+  proceedAt?: Date
   createdAt?: Date
 }
 

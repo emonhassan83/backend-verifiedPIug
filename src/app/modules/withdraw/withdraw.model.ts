@@ -1,6 +1,10 @@
 import { Schema, model } from 'mongoose'
 import { TWithdraw, TWithdrawModel } from './withdraw.interface'
-import { WITHDRAW_AUTHORITY, WITHDRAW_METHOD, WITHDRAW_STATUS } from './withdraw.constant'
+import {
+  WITHDRAW_AUTHORITY,
+  WITHDRAW_METHOD,
+  WITHDRAW_STATUS,
+} from './withdraw.constant'
 
 const withdrawSchema = new Schema<TWithdraw>(
   {
@@ -19,6 +23,7 @@ const withdrawSchema = new Schema<TWithdraw>(
     paystackTransferId: { type: String, default: null },
     recipientCode: { type: String, required: true },
     note: { type: String },
+    proceedAt: { type: Date },
     status: {
       type: String,
       enum: Object.values(WITHDRAW_STATUS),

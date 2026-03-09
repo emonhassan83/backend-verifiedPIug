@@ -22,7 +22,7 @@ import { User } from '../user/user.model'
 import { Package } from '../package/package.model'
 import { TOrder } from '../order/order.interface'
 import { Order } from '../order/order.models'
-import { ORDER_STATUS } from '../order/order.constants'
+import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
 import { Project } from '../project/project.models'
 import { PROJECT_STATUS } from '../project/project.constants'
 import {
@@ -54,9 +54,17 @@ const checkout = async (payload: TPayment) => {
 
     // Fetch model
     if (modelType === PAYMENT_MODEL_TYPE.Order) {
-      order = await Order.findById(reference).session(session)
+      order = await Order.findOne({
+        _id: reference,
+        authority: ORDER_AUTHORITY.client,
+        isDeleted: false,
+      }).session(session)
       if (!order) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found!')
+        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found or this is not client order!')
+      }
+
+      if (order.status !== ORDER_STATUS.pending) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Can make payment only pending order!')
       }
 
       // Set author (receiver = vendor/planner who will earn)
@@ -616,7 +624,7 @@ const getAllPaymentsFromDB = async (query: Record<string, any>) => {
   const pendingPayoutResult = await Withdraw.aggregate([
     {
       $match: {
-        status: WITHDRAW_STATUS.pending,
+        status: WITHDRAW_STATUS.proceed,
       },
     },
     {
