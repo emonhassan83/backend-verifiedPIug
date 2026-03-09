@@ -15,6 +15,12 @@ router.post(
 )
 
 router.patch(
+  '/make-payment/:assignProjectId',
+  auth(USER_ROLE.planer),
+  AssignProjectController.makeAVendorPayment,
+)
+
+router.patch(
   '/status/:id',
   auth(USER_ROLE.planer),
   zodValidationRequest(AssignProjectValidation.changeStatusValidationSchema),
@@ -32,12 +38,6 @@ router.get(
   '/project/:projectId',
   auth(USER_ROLE.planer),
   AssignProjectController.getAllIntoDB,
-)
-
-router.get(
-  '/:id',
-  auth(USER_ROLE.planer),
-  AssignProjectController.getAIntoDB,
 )
 
 router.delete(

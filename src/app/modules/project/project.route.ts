@@ -15,6 +15,12 @@ router.patch(
 )
 
 router.get(
+  '/payment-overview/:projectId',
+  auth(USER_ROLE.planer),
+  ProjectController.projectPaymentOverview,
+)
+
+router.get(
   '/:id',
   auth(USER_ROLE.planer),
   ProjectController.getAIntoDB,

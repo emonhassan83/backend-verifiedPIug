@@ -8,7 +8,7 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { ORDER_AUTHORITY, ORDER_STATUS } from '../order/order.constants'
 import mongoose, { Types } from 'mongoose'
 import { Order } from '../order/order.models'
-import { TVendorAssignmentStatus } from './assignProject.constants'
+import { ASSIGNMENT_PAYMENT_STATUS, TVendorAssignmentStatus, VENDOR_ASSIGNMENT_STATUS } from './assignProject.constants'
 import { vendorProjectAssignNotify } from './assignProject.utils'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
@@ -20,6 +20,8 @@ import {
 import { PROJECT_STATUS } from '../project/project.constants'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { checkSubscriptionPermission } from '../../utils/subscription.utils'
+import axios from 'axios'
+import config from '../../config'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -192,26 +194,139 @@ const getAllIntoDB = async (query: Record<string, any>) => {
   }
 }
 
-// Get Project by ID
-const getAIntoDB = async (id: string) => {
-  const result = await AssignProject.findById(id).populate([
-    {
-      path: 'vendor',
-      select: 'name email photoUrl contractNumber',
-    },
-    {
-      path: 'vendorOrder',
-    },
-  ])
-  if (!result) {
-    throw new AppError(
-      httpStatus.NOT_FOUND,
-      'Oops! Project assign vendor not found',
-    )
-  }
+// Make a payment to a vendor for a project
+const makeAVendorPayment = async (id: string, userId: string) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  return result
-}
+  try {
+    // 1. Validate planner (only planner can pay vendor)
+    const planner = await User.findById(userId).session(session);
+    if (!planner || planner.isDeleted || planner.role !== USER_ROLE.planer) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Planner profile not found or invalid');
+    }
+
+    // 2. Find AssignProject
+    const assignProject = await AssignProject.findById(id)
+      .populate('vendor')
+      .populate('project')
+      .session(session);
+
+    if (!assignProject) {
+      throw new AppError(httpStatus.NOT_FOUND, 'Assign project not found');
+    }
+
+    // 3. Corner case: Prevent duplicate payment
+    if (assignProject.paymentStatus === ASSIGNMENT_PAYMENT_STATUS.paid) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'This vendor has already been paid for this assignment'
+      );
+    }
+
+    if (assignProject.status === VENDOR_ASSIGNMENT_STATUS.completed) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        'This assignment is already marked as completed'
+      );
+    }
+
+    // 4. Check planner balance
+    if (planner.balance < assignProject.agreedAmount) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        `Insufficient balance. You need ₦${assignProject.agreedAmount} but you have ₦${planner.balance}`
+      );
+    }
+
+    // 5. Get vendor's Paystack recipient code
+    const vendor = assignProject.vendor as any;
+    if (!vendor || !vendor.playstackRecipientCode) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'Vendor has not connected their Paystack account yet'
+      );
+    }
+
+    // 6. Perform secure Paystack transfer (planner → vendor)
+    const transferResponse = await axios.post(
+      'https://api.paystack.co/transfer',
+      {
+        source: 'balance',
+        amount: assignProject.agreedAmount * 100, // kobo
+        recipient: vendor.playstackRecipientCode,
+        reason: `Payment for project ${assignProject.project?._id} - ${assignProject.serviceType?.join(', ')}`,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${config.paystack.secret_key}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!transferResponse.data.status) {
+      throw new AppError(
+        httpStatus.INTERNAL_SERVER_ERROR,
+        'Paystack transfer failed. Please try again.'
+      );
+    }
+
+    const transferData = transferResponse.data.data;
+
+    // 7. Update balances atomically
+    await User.findByIdAndUpdate(
+      planner._id,
+      { $inc: { balance: -assignProject.agreedAmount } },
+      { session }
+    );
+
+    await User.findByIdAndUpdate(
+      vendor._id,
+      { $inc: { balance: assignProject.agreedAmount } },
+      { session }
+    );
+
+    // 8. Update AssignProject status and payment
+    const updatedAssignProject = await AssignProject.findByIdAndUpdate(
+      id,
+      {
+        paidAmount: assignProject.agreedAmount,
+        paymentStatus: ASSIGNMENT_PAYMENT_STATUS.paid,
+        status: VENDOR_ASSIGNMENT_STATUS.completed,
+        completedDate: new Date().toISOString().split('T')[0],
+      },
+      { new: true, session }
+    );
+
+    // 9. Commit transaction
+    await session.commitTransaction();
+
+    // Optional: Send notification to both parties
+    // await vendorPaymentSuccessNotify(
+    //   vendor._id,
+    //   updatedAssignProject,
+    //   assignProject.agreedAmount
+    // );
+
+    return {
+      success: true,
+      message: 'Payment successfully transferred to vendor',
+      data: updatedAssignProject,
+      transferId: transferData.id,
+    };
+  } catch (error: any) {
+    await session.abortTransaction();
+    throw error instanceof AppError
+      ? error
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          error.message || 'Vendor payment failed'
+        );
+  } finally {
+    session.endSession();
+  }
+};
 
 // Update assign project
 const compareQuotes = async (
@@ -341,7 +456,7 @@ const deleteAIntoDB = async (id: string) => {
 export const AssignProjectService = {
   insertIntoDB,
   getAllIntoDB,
-  getAIntoDB,
+  makeAVendorPayment,
   compareQuotes,
   updateStatusIntoDB,
   deleteAIntoDB,

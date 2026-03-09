@@ -6,9 +6,14 @@ import { AssignProject } from '../assignProject/assignProject.models'
 import { Task } from '../task/task.models'
 import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import QueryBuilder from '../../builder/QueryBuilder'
+import { Order } from '../order/order.models'
 
 // Create a new Project
-const projectPaymentOverview = async (id: string, userId: string, query: Record<string, any>) => {
+const projectPaymentOverview = async (
+  id: string,
+  userId: string,
+  query: Record<string, any>,
+) => {
   const user = await User.findOne({
     _id: userId,
     role: USER_ROLE.planer,
@@ -29,12 +34,12 @@ const projectPaymentOverview = async (id: string, userId: string, query: Record<
     throw new AppError(httpStatus.NOT_FOUND, 'Project not found!')
   }
 
-  // Get total paid amount from AssignProject
-   const AssignProjectModel = new QueryBuilder(
+  // Fetch all assigned vendor payments for this project
+  const AssignProjectModel = new QueryBuilder(
     AssignProject.find({ project: id }).populate([
       {
         path: 'vendor',
-        select: 'name email photoUrl contractNumber address locationUrl',
+        select: 'name email photoUrl contractNumber',
       },
       {
         path: 'vendorOrder',
@@ -52,17 +57,49 @@ const projectPaymentOverview = async (id: string, userId: string, query: Record<
   const data = await AssignProjectModel.modelQuery
   const meta = await AssignProjectModel.countTotal()
 
+  // ──────────────────────────────────────────────
+  // 1. totalReceived: Based on order's payment completion
+  // ──────────────────────────────────────────────
+  let totalReceived = 0
+
+  const order = await Order.findById(project.order).lean()
+  if (order) {
+    // Include initial amount if initial payment completed
+    if (order.initialPayCompleted && order.initialAmount) {
+      totalReceived += order.initialAmount
+    }
+
+    // Include full/final amount if final payment completed
+    if (order.finalPayCompleted && order.totalAmount) {
+      totalReceived += order.totalAmount
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // 2. pendingPayment: Sum of agreedAmount where paymentStatus = pending
+  // ──────────────────────────────────────────────
+  const pendingPayment = order?.pendingAmount || 0
+
+  // ──────────────────────────────────────────────
+  // 3. Other existing calculations (vendorPayment & totalSaved)
+  // ──────────────────────────────────────────────
+  const vendorPayment = data.reduce(
+    (sum, vp) => sum + (vp.agreedAmount || 0),
+    0,
+  )
+
+  const totalSaved = totalReceived - vendorPayment
+
   return {
     data: {
-      totalReceived: 0,
-      pendingPayment: data.reduce((sum, ap) => sum + (ap.agreedAmount || 0), 0),
-      vendorPayment: 0,
-      totalSaved: 0,
+      totalReceived,
+      pendingPayment,
+      vendorPayment,
+      totalSaved,
       payments: data,
     },
     meta,
   }
-
 }
 
 // Get Project by ID

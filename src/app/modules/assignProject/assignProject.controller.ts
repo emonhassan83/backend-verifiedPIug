@@ -27,14 +27,14 @@ const getAllIntoDB = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
-// Get Project by ID
-const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
-  const result = await AssignProjectService.getAIntoDB(req.params.id)
+// Make a payment to a vendor for a project
+const makeAVendorPayment = catchAsync(async (req: Request, res: Response) => {
+  const result = await AssignProjectService.makeAVendorPayment(req.params.assignProjectId, req.user._id)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
-    message: 'Project vendor retrieved successfully',
+    message: 'Project vendor payment made successfully',
     data: result,
   })
 })
@@ -76,7 +76,7 @@ const deleteAIntoDB = catchAsync(async (req: Request, res: Response) => {
 export const AssignProjectController = {
   insertIntoDB,
   getAllIntoDB,
-  getAIntoDB,
+  makeAVendorPayment,
   compareQuotes,
   updateStatusIntoDB,
   deleteAIntoDB
