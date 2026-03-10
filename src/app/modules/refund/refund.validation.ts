@@ -6,6 +6,7 @@ const updateValidationSchema = z.object({
     status: z.enum(Object.values(REFUND_STATUS) as [string, ...string[]], {
       required_error: 'User status is required!',
     }),
+    note: z.string().optional(),
   }),
 })
 

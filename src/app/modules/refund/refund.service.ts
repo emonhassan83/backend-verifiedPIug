@@ -67,9 +67,9 @@ const getARefundFromDB = async (id: string) => {
 
 const updateRefundStatusFromDB = async (
   id: string,
-  payload: { status: TRefundStatus; amount?: number; note: string },
+  payload: { status: TRefundStatus; note: string },
 ) => {
-  const { status, amount = 0, note } = payload
+  const { status, note } = payload
 
   // 1. Validate status
   if (!Object.values(REFUND_STATUS).includes(status)) {
@@ -101,8 +101,8 @@ const updateRefundStatusFromDB = async (
     //   throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund amount')
     // }
 
-    // 6. If authority = "user" and status = "approved" → auto refund via Paystack
-    if (status === REFUND_STATUS.approved) {
+    // 6. If authority = "user" and status = "confirmed" → auto refund via Paystack
+    if (status === REFUND_STATUS.confirmed) {
       // Find linked payment
       const payment = await Payment.findOne({
         reference: refund.order,
@@ -171,7 +171,7 @@ const updateRefundStatusFromDB = async (
     const updatedRefund = await Refund.findByIdAndUpdate(
       id,
       {
-        status: REFUND_STATUS.approved,
+        status: REFUND_STATUS.confirmed,
         processedAt: new Date(),
         note,
       },
