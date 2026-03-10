@@ -19,7 +19,7 @@ const getAllRefundsFromDB = async (query: Record<string, unknown>) => {
     Refund.find().populate([
       {
         path: 'user',
-        select: 'name photoUrl',
+        select: 'name email photoUrl contractNumber',
       },
       {
         path: 'order',
@@ -48,10 +48,14 @@ const getARefundFromDB = async (id: string) => {
   const refund = await Refund.findById(id).populate([
     {
       path: 'user',
-      select: 'name photoUrl',
+      select: 'name email photoUrl contractNumber',
     },
     {
       path: 'order',
+      populate: [
+        { path: 'sender', select: 'name email photoUrl contractNumber' },
+        { path: 'receiver', select: 'name email photoUrl contractNumber' },
+      ],
     },
   ])
   if (!refund) {
@@ -91,11 +95,11 @@ const updateRefundStatusFromDB = async (
       )
     }
 
-    // 5. Use payment amount if amount is not provided
-    const refundAmount = amount || refund.amount
-    if (refundAmount <= 0 || refundAmount > refund.amount) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund amount')
-    }
+    // // 5. Use payment amount if amount is not provided
+    // const refundAmount = amount || refund.amount
+    // if (refundAmount <= 0 || refundAmount > refund.amount) {
+    //   throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund amount')
+    // }
 
     // 6. If authority = "user" and status = "approved" → auto refund via Paystack
     if (status === REFUND_STATUS.approved) {
@@ -113,30 +117,30 @@ const updateRefundStatusFromDB = async (
         )
       }
 
-      // Paystack-এ refund করো
-      const refundResponse = await refundPaystackPayment(
-        Number(payment.paymentIntentId),
-        refundAmount,
-        `Refund requested by user for order ${refund.order}`,
-      )
-      if (!refundResponse.success) {
-        if (refundResponse.alreadyRefunded) {
-          throw new AppError(
-            httpStatus.BAD_REQUEST,
-            'Transaction already fully refunded',
-          )
-        }
-        throw new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          'Paystack refund failed',
-        )
-      }
+      // // Paystack-এ refund করো
+      // const refundResponse = await refundPaystackPayment(
+      //   Number(payment.paymentIntentId),
+      //   refundAmount,
+      //   `Refund requested by user for order ${refund.order}`,
+      // )
+      // if (!refundResponse.success) {
+      //   if (refundResponse.alreadyRefunded) {
+      //     throw new AppError(
+      //       httpStatus.BAD_REQUEST,
+      //       'Transaction already fully refunded',
+      //     )
+      //   }
+      //   throw new AppError(
+      //     httpStatus.INTERNAL_SERVER_ERROR,
+      //     'Paystack refund failed',
+      //   )
+      // }
 
       // Update payment status to refunded
       await Payment.findByIdAndUpdate(
         payment._id,
         {
-          $inc: { refundedAmount: refundAmount },
+          // $inc: { refundedAmount: refundAmount },
           status: PAYMENT_STATUS.refunded,
         },
         { session },
@@ -146,8 +150,8 @@ const updateRefundStatusFromDB = async (
       await Order.findByIdAndUpdate(
         refund.order,
         {
-          refundAmount: refundAmount,
-          status: ORDER_STATUS.refunded
+          // refundAmount: refundAmount,
+          status: ORDER_STATUS.refunded,
         },
         { session },
       )
@@ -156,7 +160,7 @@ const updateRefundStatusFromDB = async (
       await Project.findOneAndUpdate(
         { order: refund.order },
         {
-          $inc: { received: -refundAmount }, // শুধু subtract করো
+          // $inc: { received: -refundAmount }, // শুধু subtract করো
           status: PROJECT_STATUS.refunded,
         },
         { session, new: true },

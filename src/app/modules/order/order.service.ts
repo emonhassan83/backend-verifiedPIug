@@ -291,7 +291,7 @@ const cancelOrderFromDB = async (
             user: userId,
             order: order._id,
             paymentIntentId: payment.paymentIntentId,
-            amount: payment.amount, // full amount (can be made partial later)
+            amount: 0, // amount will be updated after approval
             reason,
             note: note || 'User cancelled order',
             status: REFUND_STATUS.pending,
