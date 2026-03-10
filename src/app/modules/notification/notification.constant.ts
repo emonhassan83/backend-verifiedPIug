@@ -32,8 +32,9 @@ export const messages = {
   },
 
   withdraw: {
-    addRequest: 'Withdraw request added !',
-    changedStatus: 'Withdraw status changed !',
+    hold: 'Withdrawal Request On Hold',
+    proceed: 'Withdrawal Processing Started',
+    completed: 'Withdrawal Completed',
   },
 
   subscription: {

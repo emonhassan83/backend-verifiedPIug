@@ -147,7 +147,7 @@ const getAIntoDB = async (id: string) => {
   return {
     ...project,
     totalVendor,
-    // budgetProgress,
+    budgetProgress,
     taskProgress,
   }
 }

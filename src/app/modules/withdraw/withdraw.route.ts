@@ -20,12 +20,6 @@ router.patch(
   WithdrawControllers.updateWithdraw,
 )
 
-router.delete(
-  '/:id',
-  auth(USER_ROLE.vendor, USER_ROLE.planer),
-  WithdrawControllers.deleteAWithdraw,
-)
-
 router.get(
   '/my-withdraw',
   auth(USER_ROLE.vendor, USER_ROLE.planer),

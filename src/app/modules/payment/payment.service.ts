@@ -33,8 +33,13 @@ import { Participant } from '../participant/participant.models'
 import { Chat } from '../chat/chat.models'
 import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
 import { Withdraw } from '../withdraw/withdraw.model'
-import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import {
+  WITHDRAW_AUTHORITY,
+  WITHDRAW_METHOD,
+  WITHDRAW_STATUS,
+} from '../withdraw/withdraw.constant'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
+import dayjs from 'dayjs'
 
 const checkout = async (payload: TPayment) => {
   const transactionId = generateTransactionId()
@@ -60,11 +65,17 @@ const checkout = async (payload: TPayment) => {
         isDeleted: false,
       }).session(session)
       if (!order) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Order Not Found or this is not client order!')
+        throw new AppError(
+          httpStatus.NOT_FOUND,
+          'Order Not Found or this is not client order!',
+        )
       }
 
       if (order.status !== ORDER_STATUS.pending) {
-        throw new AppError(httpStatus.BAD_REQUEST, 'Can make payment only pending order!')
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Can make payment only pending order!',
+        )
       }
 
       // Set author (receiver = vendor/planner who will earn)
@@ -465,6 +476,47 @@ const confirmPayment = async (query: Record<string, any>) => {
           } else {
             console.warn(
               `Author ${payment.author} not found for payment ${paymentId}`,
+            )
+          }
+        }
+
+        // ──────────────────────────────────────────────
+        // NEW: Create Withdraw Request for Author (planner) when order payment succeeds
+        // Only for authority: 'client' (planner receives money from client)
+        // ──────────────────────────────────────────────
+        if (payment.author && order.authority === ORDER_AUTHORITY.client) {
+          // Duplicate check by payment._id
+          const existingWithdraw = await Withdraw.findOne({
+            user: payment.author,
+            reference: payment._id,
+            order: order._id,
+          }).session(session)
+
+          if (!existingWithdraw) {
+            const now = new Date()
+            const proceedAtDate = dayjs(now).add(3, 'day').toDate()
+
+            await Withdraw.create(
+              [
+                {
+                  user: payment.author,
+                  authority: WITHDRAW_AUTHORITY.planer,
+                  method: WITHDRAW_METHOD.playstack,
+                  amount: payment.authorEarning,
+                  reference: payment._id,
+                  order: order._id,
+                  proceedAt: proceedAtDate,
+                },
+              ],
+              { session },
+            )
+
+            console.log(
+              `Withdraw request created for payment ${payment._id} → ₦${payment.authorEarning}`,
+            )
+          } else {
+            console.log(
+              `Withdraw already exists for payment ${payment._id} - skipping`,
             )
           }
         }

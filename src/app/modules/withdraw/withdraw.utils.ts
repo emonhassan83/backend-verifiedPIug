@@ -5,58 +5,48 @@ import { modeType } from '../notification/notification.interface'
 import { canSendNotification } from '../notification/notification.utils'
 import { TUser } from '../user/user.interface'
 import { TWithdrawStatus } from './withdraw.constant'
+import { TWithdraw } from './withdraw.interface'
 
-export const sendWithdrawalRequestNotify = async (
-  withdraw: any, // your Withdraw document
-  user: any, // User document
+export const sendWithdrawNotify = async (
+  action: TWithdrawStatus,
+  withdraw: TWithdraw,
+  user: TUser,
+  note?: string,
 ) => {
-  const admin = await findAdmin()
-  if (!admin || !admin.fcmToken) return
+  if (!canSendNotification(user, 'payment')) return
 
-  const payload = {
-    receiver: user?._id,
-    message: messages.withdraw.addRequest,
-    description: `User ${user.fullname || user.email} requested ₦${withdraw.amount} withdrawal`,
-    reference: withdraw?._id,
+  let message = ''
+  let description = ''
+
+  const formattedAmount = `${withdraw.amount.toFixed(2)}`
+
+  switch (action) {
+    case 'hold':
+      message = messages.withdraw.hold || 'Withdrawal Request On Hold'
+      description = `Your withdrawal request of ${formattedAmount} is currently on hold. We will review it soon and notify you.`
+      break
+
+    case 'proceed':
+      message = messages.withdraw.proceed || 'Withdrawal Processing Started'
+      description = `Your withdrawal of ${formattedAmount} has been approved and is now being processed. Funds will be transferred shortly.`
+      break
+
+    case 'completed':
+      message = messages.withdraw.completed || 'Withdrawal Completed'
+      description = `Your withdrawal of ${formattedAmount} has been successfully completed! Check your bank/stripe account.`
+      break
+
+    default:
+      throw new Error('Invalid withdraw notification action')
+  }
+
+  const notifyPayload = {
+    receiver: user._id,
+    message,
+    description,
+    reference: withdraw._id as string,
     model_type: modeType.Withdraw,
   }
 
-  // Send push notification to all admins who have fcmToken
-  await sendNotification([admin.fcmToken], payload)
-}
-
-export const sendWithdrawalStatusNotify = async (
-  withdraw: any,
-  user: TUser,
-  status: TWithdrawStatus
-) => {
- if (!canSendNotification(user, 'payment')) return
- 
-   // Determine the message and description based on the action
-   let message
-   let description
- 
-   switch (status) {
-     case 'approved':
-       message = messages.refund.changedStatus
-       description = `Your withdrawal request of ₦${withdraw.amount} has been approved by admin and will be processed soon.`;
-       break
-     case 'cancelled':
-       message = messages.refund.changedStatus
-       description = `Your withdrawal request of ₦${withdraw.amount} has been cancelled by admin.`;
-       break
-     default:
-       throw new Error('Invalid action type')
-   }
- 
-   // Create a notification entry
-   const notifyPayload = {
-     receiver: user?._id,
-     message,
-     description: description,
-     reference: withdraw?._id,
-     model_type: modeType.Withdraw,
-   }
- 
-   await sendNotification([user.fcmToken], notifyPayload)
+  await sendNotification([user.fcmToken], notifyPayload)
 }

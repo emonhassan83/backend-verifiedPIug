@@ -11,7 +11,9 @@ export const WITHDRAW_METHOD = {
 export const WITHDRAW_STATUS = {
   proceed: 'proceed',
   completed: 'completed',
-  hold: 'hold'
+  hold: 'hold',
+  pending: 'pending',
+  failed: 'failed',
 } as const
 
 export type TWithdrawAuthority = keyof typeof WITHDRAW_AUTHORITY

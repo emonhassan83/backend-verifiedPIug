@@ -4,6 +4,8 @@ import { TWithdrawAuthority, TWithdrawMethod, TWithdrawStatus } from './withdraw
 export type TWithdraw = {
   _id?: string
   user: Types.ObjectId
+  order: Types.ObjectId
+  reference: Types.ObjectId
   authority: TWithdrawAuthority
   method: TWithdrawMethod
   amount: number

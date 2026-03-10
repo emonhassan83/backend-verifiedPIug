@@ -5,8 +5,8 @@ import config from './app/config'
 import { errorlogger, logger } from './app/utils/logger'
 import initializeSocketIO from './socket'
 import { seeder } from './app/seeder/seed'
-import { startSubscriptionCron } from './app/modules/subscription/subscription.service'
 import colors from 'colors';
+import { initializeCronJobs } from './app/utils/initializeCronJobs'
 
 let server: Server
 export const io = initializeSocketIO(createServer(app))
@@ -22,7 +22,7 @@ async function main() {
     seeder.seedContents()
 
     // corn functionality
-    startSubscriptionCron();
+    initializeCronJobs();
 
     server = app.listen(Number(config.port), config.ip as string, () => {
       console.log(

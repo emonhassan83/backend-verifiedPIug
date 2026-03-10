@@ -64,22 +64,10 @@ const updateWithdraw = catchAsync(async (req, res) => {
   })
 })
 
-const deleteAWithdraw = catchAsync(async (req, res) => {
-  const result = await WithdrawService.deleteAWithdrawFromDB(req.params.id)
-
-  sendResponse(res, {
-    success: true,
-    statusCode: 200,
-    message: 'Withdraw delete successfully!',
-    data: result,
-  })
-})
-
 export const WithdrawControllers = {
   createWithdraw,
   getAllWithdraw,
   getAllMyWithdraw,
   getAWithdraw,
-  updateWithdraw,
-  deleteAWithdraw,
+  updateWithdraw
 }

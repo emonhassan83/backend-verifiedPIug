@@ -9,6 +9,8 @@ import {
 const withdrawSchema = new Schema<TWithdraw>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    order: { type: Schema.Types.ObjectId, ref: 'Order', required: true },
+    reference: { type: Schema.Types.ObjectId, ref: 'Payment', required: true },
     authority: {
       type: String,
       enum: Object.values(WITHDRAW_AUTHORITY),
@@ -21,13 +23,13 @@ const withdrawSchema = new Schema<TWithdraw>(
     },
     amount: { type: Number, required: true },
     paystackTransferId: { type: String, default: null },
-    recipientCode: { type: String, required: true },
+    recipientCode: { type: String, default: null },
     note: { type: String },
-    proceedAt: { type: Date },
+    proceedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: Object.values(WITHDRAW_STATUS),
-      required: true,
+      default: WITHDRAW_STATUS.proceed,
     },
   },
   {
