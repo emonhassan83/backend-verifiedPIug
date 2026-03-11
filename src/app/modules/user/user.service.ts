@@ -11,6 +11,8 @@ import {
 import { Subscription } from '../subscription/subscription.models'
 import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
+import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
+import { RECIPIENT_STATUS } from '../paystackRecipient/paystackRecipient.constant'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -86,33 +88,43 @@ const getAllUsersFromDB = async (query: Record<string, unknown>) => {
 }
 
 const geUserByIdFromDB = async (id: string) => {
-  const user = await User.findById(id).select(
-    '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role categories notifySettings avgRating ratingCount status isKycVerified createdAt',
-  ).lean() 
+  const user = await User.findById(id)
+    .select(
+      '_id id name email bio photoUrl coverPhoto location address contractNumber locationUrl socialProfiles role categories notifySettings avgRating ratingCount status isKycVerified createdAt',
+    )
+    .lean()
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
   }
 
-  // Check active subscription
   const today = new Date()
-  const activeSubscription = await Subscription.findOne({
-    user: id,
-    paymentStatus: PAYMENT_STATUS.paid,
-    status: SUBSCRIPTION_STATUS.active,
-    isDeleted: false,
-    isExpired: false,
-    expiredAt: { $gt: today },
-  })
-    .select('type expiredAt')
-    .lean()
 
-  const isActiveSubscription = !!activeSubscription
-  const subscriptionType = activeSubscription?.type || null
+  const [activeSubscription, paystackRecipient] = await Promise.all([
+    Subscription.findOne({
+      user: id,
+      paymentStatus: PAYMENT_STATUS.paid,
+      status: SUBSCRIPTION_STATUS.active,
+      isDeleted: false,
+      isExpired: false,
+      expiredAt: { $gt: today },
+    })
+      .select('type expiredAt')
+      .lean(),
+
+    PaystackRecipient.findOne({
+      user: id,
+      isDeleted: false,
+      status: { $in: [RECIPIENT_STATUS.pending, RECIPIENT_STATUS.verified] },
+    })
+      .select('_id')
+      .lean(),
+  ])
 
   return {
     ...user,
-    isActiveSubscription,
-    type: subscriptionType,
+    isActiveSubscription: !!activeSubscription,
+    type: activeSubscription?.type || null,
+    isPaystackRecipient: !!paystackRecipient,
   }
 }
 

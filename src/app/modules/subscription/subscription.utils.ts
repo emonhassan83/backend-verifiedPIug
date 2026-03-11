@@ -287,7 +287,7 @@ export const subscriptionNotifyToUser = async (
       break
     case 'suspend':
       message = messages.subscription.suspended
-      description = `Your subscription has been suspended. Please contact support to reactivate it.`
+      description = `Your subscription has been suspended. Note: ${note || 'Please contact support for more details.'}`
       break
     case 'active':
       message = messages.subscription.active

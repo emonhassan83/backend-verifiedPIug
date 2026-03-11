@@ -1,5 +1,3 @@
-// src/app/modules/paystackRecipient/paystackRecipient.service.ts
-
 import { PaystackRecipient } from './paystackRecipient.model';
 import { User } from '../user/user.model';
 import { createPaystackRecipient } from '../../utils/paystack.utils'; // আগের ফাংশন

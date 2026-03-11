@@ -15,6 +15,7 @@ import { REFUND_STATUS } from '../refund/refund.constant'
 import { Payment } from '../payment/payment.model'
 import { USER_ROLE } from '../user/user.constant'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
+import { AssignProject } from '../assignProject/assignProject.models'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -144,7 +145,7 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
   const baseQuery = {
     $or: [{ sender: userId }, { receiver: userId }],
     isDeleted: false,
-  }
+  };
 
   const OrderModel = new QueryBuilder(
     Order.find(baseQuery).populate([
@@ -157,15 +158,40 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
     .filter()
     .paginate()
     .sort()
-    .fields()
+    .fields();
 
-  const data = await OrderModel.modelQuery
-  const meta = await OrderModel.countTotal()
+  // Raw orders data আনা
+  let data = await OrderModel.modelQuery.lean();
+
+  // Step 1: সব order-এর _id সংগ্রহ করা
+  const orderIds = data.map((order: any) => order._id);
+
+  // Step 2: একসাথে সব order-এর জন্য AssignProject চেক করা (performance-এর জন্য bulk query)
+  const assignedOrders = await AssignProject.find(
+    {
+      vendorOrder: { $in: orderIds }
+    },
+    { vendorOrder: 1 }
+  ).lean();
+
+  // Step 3: assigned order-গুলোর set তৈরি করা (দ্রুত lookup-এর জন্য)
+  const assignedOrderSet = new Set(
+    assignedOrders.map((assign: any) => assign.vendorOrder.toString())
+  );
+
+  // Step 4: প্রতিটি order-এ isAssigned ফিল্ড যোগ করা
+  data = data.map((order: any) => ({
+    ...order,
+    isAssigned: assignedOrderSet.has(order._id.toString()),
+  }));
+
+  const meta = await OrderModel.countTotal();
+
   return {
     data,
     meta,
-  }
-}
+  };
+};
 
 // Get Order by ID
 const getAIntoDB = async (id: string) => {

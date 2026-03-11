@@ -19,53 +19,6 @@ import {
   TSubscriptionStatus,
 } from './subscription.constants'
 
-export const startSubscriptionCron = () => {
-  cron.schedule('0 */12 * * *', async () => {
-    console.log('⏰ Running subscription check every 12 hours...')
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const tomorrow = new Date()
-    tomorrow.setHours(23, 59, 59, 999)
-
-    try {
-      // 1. Notify about expiring today
-      const expiringToday = await Subscription.find({
-        expiredAt: { $gte: today, $lte: tomorrow },
-        isExpired: false,
-        paymentStatus: PAYMENT_STATUS.paid,
-      })
-
-      for (const subscription of expiringToday) {
-        const user = await User.findById(subscription.user).select('fcmToken')
-
-        if (user && user?.fcmToken) {
-          await subscriptionNotifyToUser('WARNING', subscription, user)
-        }
-      }
-
-      // 2. Mark as expired
-      const alreadyExpired = await Subscription.find({
-        expiredAt: { $lt: today },
-        isExpired: false,
-        paymentStatus: PAYMENT_STATUS.paid,
-      })
-
-      for (const subscription of alreadyExpired) {
-        subscription.isExpired = true
-        await subscription.save()
-      }
-
-      console.log(
-        `✅ Subscription check done: ${expiringToday.length} warnings, ${alreadyExpired.length} marked expired.`,
-      )
-    } catch (error) {
-      console.error('❌ Subscription cron job error:', error)
-    }
-  })
-}
-
 const createSubscription = async (payload: TSubscriptions) => {
   const session = await mongoose.startSession()
   session.startTransaction()

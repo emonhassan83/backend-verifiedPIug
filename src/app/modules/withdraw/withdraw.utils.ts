@@ -23,7 +23,7 @@ export const sendWithdrawNotify = async (
   switch (action) {
     case 'hold':
       message = messages.withdraw.hold || 'Withdrawal Request On Hold'
-      description = `Your withdrawal request of ${formattedAmount} is currently on hold. We will review it soon and notify you.`
+      description = `Your withdrawal request of ${formattedAmount} is currently on hold. Note: ${note || 'No additional information provided.'}`
       break
 
     case 'proceed':

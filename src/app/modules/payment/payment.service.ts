@@ -71,10 +71,10 @@ const checkout = async (payload: TPayment) => {
         )
       }
 
-      if (order.status !== ORDER_STATUS.pending) {
+      if (order.status !== ORDER_STATUS.pending && order.status !== ORDER_STATUS.running) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
-          'Can make payment only pending order!',
+          'Can make payment only pending or running order!',
         )
       }
 
@@ -499,7 +499,7 @@ const confirmPayment = async (query: Record<string, any>) => {
             await Withdraw.create(
               [
                 {
-                  user: payment.author,
+                  user: order.sender, // planner is the user who will receive the money
                   authority: WITHDRAW_AUTHORITY.planer,
                   method: WITHDRAW_METHOD.playstack,
                   amount: payment.authorEarning,

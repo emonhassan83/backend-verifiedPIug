@@ -69,15 +69,15 @@ const insertIntoDB = async (
 
 // Get all Verification
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const VerificationModel = new QueryBuilder(Verification.find(), query)
+  const verificationModel = new QueryBuilder(Verification.find(), query)
     .search([''])
     .filter()
     .paginate()
     .sort()
     .fields()
 
-  const data = await VerificationModel.modelQuery
-  const meta = await VerificationModel.countTotal()
+  const data = await verificationModel.modelQuery
+  const meta = await verificationModel.countTotal()
   return {
     data,
     meta,

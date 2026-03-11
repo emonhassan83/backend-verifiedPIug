@@ -29,7 +29,7 @@ const withdrawSchema = new Schema<TWithdraw>(
     status: {
       type: String,
       enum: Object.values(WITHDRAW_STATUS),
-      default: WITHDRAW_STATUS.proceed,
+      default: WITHDRAW_STATUS.pending,
     },
   },
   {
