@@ -1,7 +1,6 @@
 import httpStatus from 'http-status'
 import AppError from '../../errors/AppError'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { TWithdraw } from './withdraw.interface'
 import { Withdraw } from './withdraw.model'
 import { User } from '../user/user.model'
 import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
@@ -176,7 +175,7 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   const pendingPayout = pendingPayoutResult[0]?.pendingPayout || 0
 
   const withdrawQuery = new QueryBuilder(
-    Withdraw.find().populate([{ path: 'user', select: 'name email photoUrl' }]),
+    Withdraw.find().populate([{ path: 'user', select: 'name email photoUrl' }, { path: 'order', select: 'title' }]),
     query,
   )
     .search([])
