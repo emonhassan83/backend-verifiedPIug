@@ -4,6 +4,8 @@ import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import multer, { memoryStorage } from 'multer'
 import parseData from '../../middleware/parseData'
+import zodValidationRequest from '../../middleware/validateRequest'
+import { FileValidation } from './fileUpload.validation'
 
 const router = Router()
 const storage = memoryStorage()
@@ -14,6 +16,7 @@ router.post(
   auth(USER_ROLE.planer),
   upload.fields([{ name: 'files', maxCount: 10 }]),
   parseData(),
+  zodValidationRequest(FileValidation.createValidationSchema),
   FileController.insertIntoDB,
 )
 

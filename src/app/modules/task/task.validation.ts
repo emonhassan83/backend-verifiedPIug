@@ -1,15 +1,18 @@
+import { Types } from 'mongoose'
 import { z } from 'zod'
+
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId format',
+})
 
 const createValidationSchema = z.object({
   body: z.object({
-     project: z.string({
-      required_error: "Project ID is required",
-    }),
+    project: objectIdSchema,
     title: z.string({
-      required_error: "Task title is required",
+      required_error: 'Task title is required',
     }),
     date: z.string({
-      required_error: "Task date is required",
+      required_error: 'Task date is required',
     }),
   }),
 })
@@ -21,7 +24,7 @@ const updateValidationSchema = z.object({
   }),
 })
 
-export const TaskValidation  = {
+export const TaskValidation = {
   createValidationSchema,
   updateValidationSchema,
 }

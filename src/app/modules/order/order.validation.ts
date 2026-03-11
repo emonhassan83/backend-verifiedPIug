@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { ORDER_STATUS } from './order.constants'
+import { Types } from 'mongoose'
+
+const objectIdSchema = z.string().refine((val) => Types.ObjectId.isValid(val), {
+  message: 'Invalid ObjectId format',
+})
 
 const createValidationSchema = z.object({
   body: z.object({
-    receiver: z.string({ required_error: 'Receiver ID is required' }),
+    receiver: objectIdSchema,
     title: z.string({ required_error: 'Title is required' }).min(3),
     type: z.string({ required_error: 'Order type is required' }).min(3),
     shortDescription: z
