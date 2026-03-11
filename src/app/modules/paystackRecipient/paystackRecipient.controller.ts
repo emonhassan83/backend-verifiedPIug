@@ -15,6 +15,16 @@ const connectAccount = catchAsync(async (req, res) => {
   });
 });
 
+const getBanks = catchAsync(async (req, res) => {
+  const result = await PaystackRecipientService.getPaystackBanks()
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'Banks retrieved successfully',
+    data: result,
+  })
+})
+
 const getMyRecipients = catchAsync(async (req, res) => {
   const userId = req.user._id;
   const result = await PaystackRecipientService.getUserRecipients(userId);
@@ -57,6 +67,7 @@ const deleteRecipient = catchAsync(async (req, res) => {
 
 export const PaystackRecipientController = {
   connectAccount,
+  getBanks,
   getMyRecipients,
   setDefault,
   deleteRecipient,

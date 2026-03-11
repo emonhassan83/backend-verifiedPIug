@@ -12,6 +12,7 @@ import { subscriptionNotifyToUser } from '../modules/subscription/subscription.u
 import { sendWithdrawCompletedEmail } from './emailNotify'
 import { Order } from '../modules/order/order.models'
 import mongoose from 'mongoose'
+import { RECIPIENT_STATUS } from '../modules/paystackRecipient/paystackRecipient.constant'
 
 /**
  * Initializes and starts all scheduled cron jobs.
@@ -20,78 +21,71 @@ import mongoose from 'mongoose'
 export const initializeCronJobs = () => {
   // Run every day at 00:05 AM
   cron.schedule('5 0 * * *', async () => {
-    console.log('Running daily withdraw processor (3-day delay)...')
+  console.log('Running daily withdraw processor (3-day delay)...')
 
-    const now = new Date()
+  const now = new Date()
 
-    // Find pending withdraws whose proceedAt is <= now
-    const pendingWithdraws = await Withdraw.find({
-      status: WITHDRAW_STATUS.pending,
-      proceedAt: { $lte: now },
-      isDeleted: false,
-    }).limit(50) // batch limit to avoid overload
+  const pendingWithdraws = await Withdraw.find({
+    status: WITHDRAW_STATUS.pending,
+    proceedAt: { $lte: now },
+    isDeleted: false,
+  }).limit(50)
 
-    if (pendingWithdraws.length === 0) {
-      console.log('No pending withdraws to process')
-      return // Safe exit
-    }
+  if (pendingWithdraws.length === 0) {
+    console.log('No pending withdraws to process')
+    return
+  }
 
-    console.log(
-      `Found ${pendingWithdraws.length} pending withdrawals to process`,
-    )
+  console.log(`Found ${pendingWithdraws.length} pending withdrawals to process`)
 
-    let processedCount = 0
-    let failedCount = 0
+  let processedCount = 0
+  let failedCount = 0
 
-    for (const withdraw of pendingWithdraws) {
-      const session = await mongoose.startSession()
-      session.startTransaction()
+  for (const withdraw of pendingWithdraws) {
+    const session = await mongoose.startSession()
+    session.startTransaction()
 
-      try {
-        // 1. Lock the withdraw record (prevent concurrent processing)
-        const lockedWithdraw = await Withdraw.findOneAndUpdate(
-          {
-            _id: withdraw._id,
-            status: WITHDRAW_STATUS.pending,
-          },
-          { $set: { status: WITHDRAW_STATUS.proceed } },
-          { new: true, session },
-        )
+    try {
+      const lockedWithdraw = await Withdraw.findOneAndUpdate(
+        { _id: withdraw._id, status: WITHDRAW_STATUS.pending },
+        { $set: { status: WITHDRAW_STATUS.proceed } },
+        { new: true, session },
+      )
 
-        if (!lockedWithdraw) {
-          console.log(
-            `Withdraw ${withdraw._id} already being processed or completed - skipping`,
-          )
-          await session.commitTransaction()
-          session.endSession()
-          continue
-        }
+      if (!lockedWithdraw) {
+        console.log(`Withdraw ${withdraw._id} already processing - skipping`)
+        await session.commitTransaction()
+        session.endSession()
+        continue
+      }
 
-        // 2. Fetch user and default recipient
-        const user = await User.findById(withdraw.user).session(session)
-        if (!user) {
-          throw new Error(`User ${withdraw.user} not found`)
-        }
+      const user = await User.findById(withdraw.user).session(session)
+      if (!user) throw new Error(`User ${withdraw.user} not found`)
 
-        const recipient = await PaystackRecipient.findOne({
-          user: withdraw.user,
-          isDefault: true,
-          isDeleted: false,
-          status: 'verified',
-        }).session(session)
+      // ✅ verified এবং pending দুটোই accept করো
+      const recipient = await PaystackRecipient.findOne({
+        user: withdraw.user,
+        isDefault: true,
+        isDeleted: false,
+        status: { $in: [RECIPIENT_STATUS.verified, RECIPIENT_STATUS.pending] },
+      }).session(session)
 
-        if (!recipient || !recipient.recipientCode) {
-          throw new Error(
-            `No verified default recipient found for user ${withdraw.user}`,
-          )
-        }
+      if (!recipient?.recipientCode) {
+        throw new Error(`No recipient found for user ${withdraw.user}`)
+      }
 
-        // 3. Perform Paystack transfer
+      // ✅ Test mode mock
+      let transferId: string
+
+      if (config.paystack.secret_key?.startsWith('sk_test_')) {
+        console.log('Test mode: Mocking Paystack transfer')
+        transferId = `transfer_test_${Date.now()}`
+      } else {
         const response = await axios.post(
           'https://api.paystack.co/transfer',
           {
             source: 'balance',
-            amount: withdraw.amount * 100, // in kobo
+            amount: withdraw.amount * 100,
             recipient: recipient.recipientCode,
             reason: withdraw.note || 'Planner earning payout',
           },
@@ -106,60 +100,50 @@ export const initializeCronJobs = () => {
         if (!response.data.status) {
           throw new Error(`Paystack transfer failed: ${response.data.message}`)
         }
-
-        const transferData = response.data.data
-
-        // 4. Update withdraw record
-        await Withdraw.findByIdAndUpdate(
-          withdraw._id,
-          {
-            paystackTransferId: transferData.id,
-            recipientCode: recipient.recipientCode,
-            status: WITHDRAW_STATUS.completed,
-            proceedAt: new Date(), // actual completion time
-          },
-          { session },
-        )
-
-        // 5. Deduct balance from user (planner)
-        await User.findByIdAndUpdate(
-          withdraw.user,
-          { $inc: { balance: -withdraw.amount } },
-          { session },
-        )
-
-        // Optional: Send success email to planner
-        const order = await Order.findById(withdraw.order)
-        if (order) {
-          await sendWithdrawCompletedEmail(user, withdraw, order)
-        }
-
-        await session.commitTransaction()
-        processedCount++
-        console.log(
-          `Withdraw ${withdraw._id} processed successfully: ₦${withdraw.amount}`,
-        )
-      } catch (error: any) {
-        await session.abortTransaction()
-        failedCount++
-        console.error(`Failed to process withdraw ${withdraw._id}:`, error)
-
-        // Mark as failed (no retry here - can be retried next day)
-        await Withdraw.findByIdAndUpdate(withdraw._id, {
-          status: WITHDRAW_STATUS.failed,
-          note: `Failed: ${error.message || 'Unknown error'}`,
-        }).catch((err) =>
-          console.error('Failed to mark withdraw as failed:', err),
-        )
-      } finally {
-        session.endSession()
+        transferId = String(response.data.data.id)
       }
-    }
 
-    console.log(
-      `Withdraw processing completed: ${processedCount} success, ${failedCount} failed`,
-    )
-  })
+      // ✅ Status proceed রাখো — webhook completed করবে
+      await Withdraw.findByIdAndUpdate(
+        withdraw._id,
+        {
+          paystackTransferId: transferId,
+          recipientCode: recipient.recipientCode,
+          status: WITHDRAW_STATUS.proceed,
+          proceedAt: new Date(),
+        },
+        { session },
+      )
+
+      // ✅ Balance deduct করো
+      await User.findByIdAndUpdate(
+        withdraw.user,
+        { $inc: { balance: -withdraw.amount } },
+        { session },
+      )
+
+      // ✅ Email webhook এ পাঠাবে, এখানে না
+      await session.commitTransaction()
+      processedCount++
+      console.log(`Withdraw ${withdraw._id} initiated: ₦${withdraw.amount}`)
+
+    } catch (error: any) {
+      await session.abortTransaction()
+      failedCount++
+      console.error(`Failed to process withdraw ${withdraw._id}:`, error)
+
+      await Withdraw.findByIdAndUpdate(withdraw._id, {
+        status: WITHDRAW_STATUS.failed,
+        note: `Failed: ${error.message || 'Unknown error'}`,
+      }).catch((err) => console.error('Failed to mark withdraw as failed:', err))
+
+    } finally {
+      session.endSession()
+    }
+  }
+
+  console.log(`Withdraw processing completed: ${processedCount} success, ${failedCount} failed`)
+})
 
   // 2.subscription check every 12 hours
   cron.schedule('0 */12 * * *', async () => {

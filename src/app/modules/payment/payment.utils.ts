@@ -13,7 +13,7 @@ import { Package } from '../package/package.model'
 import { Subscription } from '../subscription/subscription.models'
 import { Payment } from './payment.model'
 import { startSession, Types } from 'mongoose'
-import crypto from 'crypto';
+import crypto from 'crypto'
 import { PAYMENT_STATUS } from './payment.constant'
 import { sendNotification } from '../../utils/sentNotification'
 import {
@@ -22,6 +22,12 @@ import {
 } from '../subscription/subscription.constants'
 import { DURATION_TYPE } from '../package/package.constant'
 import { canSendNotification } from '../notification/notification.utils'
+import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
+import { RECIPIENT_STATUS } from '../paystackRecipient/paystackRecipient.constant'
+import { Withdraw } from '../withdraw/withdraw.model'
+import { WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import { Order } from '../order/order.models'
+import { sendWithdrawCompletedEmail } from '../../utils/emailNotify'
 
 export const paystack = Paystack(config.paystack.secret_key)
 
@@ -586,6 +592,180 @@ export const handlePaystackWebhook = async (req: any) => {
         break
       }
 
+      // ──────────────────────────────────────────────
+      // Transfer সফল হয়েছে (Withdraw completed)
+      // ──────────────────────────────────────────────
+      case 'transfer.success': {
+        const { id, amount } = event.data
+
+        const withdraw = await Withdraw.findOneAndUpdate(
+          { paystackTransferId: String(id) },
+          { status: WITHDRAW_STATUS.completed },
+          { session, new: true },
+        )
+
+        if (!withdraw) {
+          console.warn(`No withdraw found for transfer: ${id}`)
+          break
+        }
+
+        const user = await User.findById(withdraw.user).session(session)
+
+        // ✅ Email এখানে পাঠাও
+        const order = await Order.findById(withdraw.order)
+        if (user && order) {
+          await sendWithdrawCompletedEmail(user, withdraw, order)
+        }
+
+        if (user?.fcmToken && canSendNotification(user, 'payment')) {
+          const notifyPayload = {
+            receiver: user._id,
+            message: 'Withdrawal Successful',
+            description: `Your withdrawal of ₦${amount / 100} has been successfully processed.`,
+            reference: withdraw._id,
+            model_type: modeType.Payment,
+          }
+          await sendNotification([user.fcmToken], notifyPayload)
+        }
+
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // Transfer ফেল হয়েছে — balance ফেরত দাও
+      // ──────────────────────────────────────────────
+      case 'transfer.failed':
+      case 'transfer.reversed': {
+        const { id, amount, reason } = event.data
+        console.log(`[${event.event}] transfer_id: ${id} | reason: ${reason}`)
+
+        const withdraw = await Withdraw.findOneAndUpdate(
+          { paystackTransferId: String(id) },
+          {
+            status: WITHDRAW_STATUS.failed,
+            note: `Failed: ${reason || 'Unknown reason'}`,
+          },
+          { session, new: true },
+        )
+
+        if (!withdraw) {
+          console.warn(`No withdraw found for transfer: ${id}`)
+          break
+        }
+
+        // Balance ফেরত দাও
+        await User.findByIdAndUpdate(
+          withdraw.user,
+          { $inc: { balance: withdraw.amount } },
+          { session },
+        )
+
+        const user = await User.findById(withdraw.user).session(session)
+        if (user?.fcmToken && canSendNotification(user, 'payment')) {
+          const notifyPayload = {
+            receiver: user._id,
+            message: 'Withdrawal Failed',
+            description: `Your withdrawal of ₦${amount / 100} failed. ${reason || ''}. Amount has been refunded to your balance.`,
+            reference: withdraw._id,
+            model_type: modeType.Payment,
+          }
+          await sendNotification([user.fcmToken], notifyPayload)
+        }
+
+        // Admin notify
+        const admin = await findAdmin()
+        if (admin?.fcmToken) {
+          const notifyPayload = {
+            receiver: admin._id,
+            message: 'Withdrawal Failed',
+            description: `Withdrawal of ₦${amount / 100} failed for user ${user?.email}. Reason: ${reason}`,
+            reference: withdraw._id,
+            model_type: modeType.Payment,
+          }
+          await sendNotification([admin.fcmToken], notifyPayload)
+        }
+
+        break
+      }
+
+      // ──────────────────────────────────────────────
+      // ৭. অন্যান্য ইভেন্ট (যেগুলো হ্যান্ডেল করা হয়নি)
+      // ──────────────────────────────────────────────
+      case 'transferrecipient.update': {
+        const { recipient_code, active, status, metadata, reason } = event.data
+        console.log(
+          `[transferrecipient.update] code: ${recipient_code} | status: ${status}`,
+        )
+
+        // Metadata থেকে userId নেওয়া (যদি আপনি create-এ metadata পাঠিয়ে থাকেন)
+        const userId = metadata?.userId
+        if (!userId) {
+          console.warn('No userId found in metadata - skipping')
+          break
+        }
+
+        const recipient = await PaystackRecipient.findOne({
+          recipientCode: recipient_code,
+          user: userId,
+          isDeleted: false,
+        }).session(session)
+
+        if (!recipient) {
+          console.warn(`Recipient not found: ${recipient_code}`)
+          break
+        }
+
+        // Status update
+        let updateFields = {
+          status:
+            status === 'success'
+              ? RECIPIENT_STATUS.verified
+              : RECIPIENT_STATUS.rejected,
+          verifiedAt: status === 'success' ? new Date() : null,
+          rejectedReason:
+            status !== 'success' ? reason || 'Unknown reason' : null,
+        }
+
+        await PaystackRecipient.findByIdAndUpdate(recipient._id, updateFields, {
+          session,
+        })
+
+        // User notify
+        const user = await User.findById(userId).session(session)
+        if (user && user.fcmToken) {
+          const message =
+            status === 'success'
+              ? 'Your bank account has been successfully verified!'
+              : `Bank account verification failed: ${reason || 'Unknown reason'}. Please try again.`
+
+          const notifyPayload = {
+            receiver: user._id,
+            message: 'Bank Account Update',
+            description: message,
+            reference: recipient._id,
+            model_type: modeType.Payment,
+          }
+          await sendNotification([user.fcmToken], notifyPayload)
+        }
+
+        // Optional: Admin notify if rejected
+        if (status !== 'success') {
+          const admin = await findAdmin()
+          if (admin && admin.fcmToken) {
+            const notifyPayload = {
+              receiver: admin._id,
+              message: 'Bank Verification Failed',
+              description: `User ${user?.name || userId} bank verification failed: ${reason}`,
+              reference: recipient._id,
+              model_type: modeType.Payment,
+            }
+            await sendNotification([admin.fcmToken], notifyPayload)
+          }
+        }
+
+        break
+      }
+
       default:
         console.log('Unhandled webhook event:', event.event)
     }
@@ -679,7 +859,9 @@ export const refundPaystackPayment = async (
   customerNote?: string,
 ) => {
   try {
-    console.log(`Initiating refund for transaction ${transactionId} | amount: ${refundAmount}`);
+    console.log(
+      `Initiating refund for transaction ${transactionId} | amount: ${refundAmount}`,
+    )
 
     const response = await axios.post(
       'https://api.paystack.co/refund',
@@ -694,10 +876,10 @@ export const refundPaystackPayment = async (
           Authorization: `Bearer ${config.paystack.secret_key}`,
           'Content-Type': 'application/json',
         },
-      }
-    );
+      },
+    )
 
-    console.log('Paystack refund response:', response.data);
+    console.log('Paystack refund response:', response.data)
 
     if (response.data.status) {
       return {
@@ -705,23 +887,27 @@ export const refundPaystackPayment = async (
         refundId: response.data.data.id,
         amountRefunded: response.data.data.amount / 100,
         message: 'Refund processed successfully',
-      };
+      }
     } else {
-      throw new AppError(httpStatus.BAD_REQUEST, response.data.message || 'Refund failed');
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        response.data.message || 'Refund failed',
+      )
     }
   } catch (error: any) {
-    const message = error?.response?.data?.message || 'Paystack refund request failed';
-    console.error('Refund error:', message);
+    const message =
+      error?.response?.data?.message || 'Paystack refund request failed'
+    console.error('Refund error:', message)
 
     if (message.includes('already been fully reversed')) {
       return {
         success: false,
         alreadyRefunded: true,
         message,
-      };
+      }
     }
 
-    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, message);
+    throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, message)
   }
 }
 

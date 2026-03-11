@@ -21,6 +21,12 @@ router.delete(
 )
 
 router.get(
+  '/banks',
+  auth(USER_ROLE.planer, USER_ROLE.vendor),
+  PaystackRecipientController.getBanks,
+)
+
+router.get(
   '/my-recipients',
   auth(USER_ROLE.vendor, USER_ROLE.planer),
   PaystackRecipientController.getMyRecipients,
