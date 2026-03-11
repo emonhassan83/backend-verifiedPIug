@@ -202,7 +202,14 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
 // 3. For a withdraw request
 const getAWithdrawFromDB = async (id: string) => {
   const result = await Withdraw.findById(id).populate([
-    { path: 'user', select: 'name email photoUrl balance' },
+    { path: 'user', select: 'name email contractNumber photoUrl balance' },
+    {
+      path: 'order',
+      populate: [
+        { path: 'sender', select: 'name email contractNumber photoUrl' },
+        { path: 'receiver', select: 'name email contractNumber photoUrl' },
+      ],
+    },
   ])
 
   if (!result) {
