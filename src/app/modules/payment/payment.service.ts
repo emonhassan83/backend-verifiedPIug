@@ -79,7 +79,7 @@ const checkout = async (payload: TPayment) => {
       }
 
       // Set author (receiver = vendor/planner who will earn)
-      payload.author = order.receiver
+      payload.author = order.sender
     } else if (modelType === PAYMENT_MODEL_TYPE.Subscription) {
       subscription = await Subscription.findById(reference)
         .populate('package')

@@ -219,117 +219,6 @@ const getAWithdrawFromDB = async (id: string) => {
 }
 
 // 4. Admin withdraw request update
-// const updateWithdrawFromDB = async (
-//   id: string,
-//     payload: { status: TWithdrawStatus; note?: string }
-// ) => {
-//   const { status, note } = payload
-
-//   const session = await startSession()
-//   session.startTransaction()
-
-//   try {
-//     const withdraw = await Withdraw.findById(id).session(session)
-//     if (!withdraw) {
-//       throw new AppError(httpStatus.NOT_FOUND, 'Withdraw request not found')
-//     }
-
-//     const user = await User.findById(withdraw.user).session(session)
-//     if (!user) {
-//       throw new AppError(httpStatus.NOT_FOUND, 'User not found')
-//     }
-
-//     // check request
-//     if (withdraw.status !== WITHDRAW_STATUS.pending) {
-//       throw new AppError(
-//         httpStatus.FORBIDDEN,
-//         `Cannot update. Request is already ${withdraw.status}`,
-//       )
-//     }
-
-//     // IF Status approved then Paystack transfer
-//     if (status === WITHDRAW_STATUS.approved) {
-//       if (user.balance < withdraw.amount) {
-//         throw new AppError(
-//           httpStatus.BAD_REQUEST,
-//           'User has insufficient balance now',
-//         )
-//       }
-//       // Paystack- transfar
-//       const transferResponse = await axios.post(
-//         'https://api.paystack.co/transfer',
-//         {
-//           source: 'balance',
-//           amount: withdraw.amount * 100, // kobo
-//           recipient: withdraw.recipientCode,
-//           reason: payload.note || `Approved withdrawal for user ${user._id}`,
-//         },
-//         {
-//           headers: {
-//             Authorization: `Bearer ${config.paystack.secret_key}`,
-//             'Content-Type': 'application/json',
-//           },
-//         },
-//       )
-
-//       if (!transferResponse.data.status) {
-//         throw new AppError(
-//           httpStatus.INTERNAL_SERVER_ERROR,
-//           'Paystack transfer failed',
-//         )
-//       }
-
-//       const transferData = transferResponse.data.data
-
-//       // User balance reduce
-//       await User.findByIdAndUpdate(
-//         withdraw.user,
-//         {
-//           $inc: { balance: -withdraw.amount },
-//         },
-//         { session },
-//       )
-
-//       // Withdraw update
-//       await Withdraw.findByIdAndUpdate(
-//         id,
-//         {
-//           status: WITHDRAW_STATUS.paid,
-//           paystackTransferId: transferData.id,
-//           note,
-//         },
-//         { session, new: true },
-//       )
-//     }
-
-//     // Others status updated
-//     const updatedWithdraw = await Withdraw.findByIdAndUpdate(
-//       id,
-//       {
-//         status,
-//         note,
-//         processedAt: new Date(),
-//       },
-//       { session, new: true },
-//     )
-
-//     // Notify user: payment sent
-//     await sendWithdrawalStatusNotify(
-//       updatedWithdraw,
-//       user,
-//       status as 'pending' | 'approved' | 'cancelled' | 'paid',
-//     )
-
-//     await session.commitTransaction()
-//     return updatedWithdraw
-//   } catch (error: any) {
-//     await session.abortTransaction()
-//     throw error
-//   } finally {
-//     session.endSession()
-//   }
-// }
-
 const updateWithdrawFromDB = async (
   id: string,
   payload: { status: TWithdrawStatus; note?: string },
@@ -355,25 +244,25 @@ const updateWithdrawFromDB = async (
       )
     }
 
-    // Case 1: proceed → hold → clear proceedAt
+    // Case 1: pending → hold → clear proceedAt
     if (
-      currentStatus === WITHDRAW_STATUS.proceed &&
+      currentStatus === WITHDRAW_STATUS.pending &&
       status === WITHDRAW_STATUS.hold
     ) {
       withdraw.proceedAt = undefined
       withdraw.status = WITHDRAW_STATUS.hold
     }
 
-    // Case 2: hold → proceed → set proceedAt = now + 3 days
+    // Case 2: hold → pending → set proceedAt = now + 3 days
     else if (
       currentStatus === WITHDRAW_STATUS.hold &&
-      status === WITHDRAW_STATUS.proceed
+      status === WITHDRAW_STATUS.pending
     ) {
       const now = new Date()
       const proceedAtDate = dayjs(now).add(3, 'day').toDate()
 
       withdraw.proceedAt = proceedAtDate
-      withdraw.status = WITHDRAW_STATUS.proceed
+      withdraw.status = WITHDRAW_STATUS.pending
     }
 
     // Other status changes (e.g., rejected, etc.) → just update status

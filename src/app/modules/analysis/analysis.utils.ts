@@ -273,7 +273,7 @@ export const authorOrderCountOverview = async (
   return await Order.aggregate([
     {
       $match: {
-        receiver: new mongoose.Types.ObjectId(userId),
+        sender: new mongoose.Types.ObjectId(userId),
         authority: ORDER_AUTHORITY.client,
         status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
         isDeleted: false,
@@ -319,7 +319,7 @@ export const vendorOrderResult = async (year: number, userId: string) => {
   return await Order.aggregate([
     {
       $match: {
-        sender: new mongoose.Types.ObjectId(userId),
+        receiver: new mongoose.Types.ObjectId(userId),
         authority: ORDER_AUTHORITY.vendor,
         status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
         isDeleted: false,

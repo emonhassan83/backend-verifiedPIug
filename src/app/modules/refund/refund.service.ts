@@ -13,6 +13,7 @@ import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 import { refundPaystackPayment } from '../payment/payment.utils'
 import { Project } from '../project/project.models'
 import { PROJECT_STATUS } from '../project/project.constants'
+import { TRefund } from './refund.interface'
 
 const getAllRefundsFromDB = async (query: Record<string, unknown>) => {
   const refundQuery = new QueryBuilder(
@@ -95,102 +96,20 @@ const updateRefundStatusFromDB = async (
       )
     }
 
-    // // 5. Use payment amount if amount is not provided
-    // const refundAmount = amount || refund.amount
-    // if (refundAmount <= 0 || refundAmount > refund.amount) {
-    //   throw new AppError(httpStatus.BAD_REQUEST, 'Invalid refund amount')
-    // }
-
-    // 6. If authority = "user" and status = "confirmed" → auto refund via Paystack
-    if (status === REFUND_STATUS.confirmed) {
-      // Find linked payment
-      const payment = await Payment.findOne({
-        reference: refund.order,
-        modelType: PAYMENT_MODEL_TYPE.Order,
-        isPaid: true,
-        isDeleted: false,
-      }).session(session)
-      if (!payment || !payment.paymentIntentId) {
-        throw new AppError(
-          httpStatus.BAD_REQUEST,
-          'No payment found for this order to refund',
-        )
-      }
-
-      // // Paystack-এ refund করো
-      // const refundResponse = await refundPaystackPayment(
-      //   Number(payment.paymentIntentId),
-      //   refundAmount,
-      //   `Refund requested by user for order ${refund.order}`,
-      // )
-      // if (!refundResponse.success) {
-      //   if (refundResponse.alreadyRefunded) {
-      //     throw new AppError(
-      //       httpStatus.BAD_REQUEST,
-      //       'Transaction already fully refunded',
-      //     )
-      //   }
-      //   throw new AppError(
-      //     httpStatus.INTERNAL_SERVER_ERROR,
-      //     'Paystack refund failed',
-      //   )
-      // }
-
-      // Update payment status to refunded
-      await Payment.findByIdAndUpdate(
-        payment._id,
-        {
-          // $inc: { refundedAmount: refundAmount },
-          status: PAYMENT_STATUS.refunded,
-        },
-        { session },
-      )
-
-      // Update order refund fields
-      await Order.findByIdAndUpdate(
-        refund.order,
-        {
-          // refundAmount: refundAmount,
-          status: ORDER_STATUS.refunded,
-        },
-        { session },
-      )
-
-      // Project received update
-      await Project.findOneAndUpdate(
-        { order: refund.order },
-        {
-          // $inc: { received: -refundAmount }, // শুধু subtract করো
-          status: PROJECT_STATUS.refunded,
-        },
-        { session, new: true },
-      )
-    }
-
-    // 7. Update refund status
-    const updatedRefund = await Refund.findByIdAndUpdate(
+    // 5. Change then update the refund status
+    const result = await Refund.findByIdAndUpdate(
       id,
-      {
-        status: REFUND_STATUS.confirmed,
-        processedAt: new Date(),
-        note,
-      },
+      { status },
       { new: true, session },
     )
-    if (!updatedRefund) {
-      throw new AppError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Refund update failed',
-      )
-    }
 
-    // 8. Notify user
+    // 6. Notify user
     const user = await User.findById(refund.user).session(session)
     if (user) {
       await refundChangeStatusNotifyToUser(
         'CHANGED_STATUS',
         user,
-        updatedRefund,
+        result as TRefund,
         note,
       )
     }
@@ -198,7 +117,7 @@ const updateRefundStatusFromDB = async (
     await session.commitTransaction()
     session.endSession()
 
-    return updatedRefund
+    return refund
   } catch (error: any) {
     await session.abortTransaction()
     session.endSession()
