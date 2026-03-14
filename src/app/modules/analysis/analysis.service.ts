@@ -384,9 +384,9 @@ const vendorAnalysisData = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
   if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
   }
 
   const { revenue_year, satisfaction_year, service_year, booking_year } = query
@@ -443,14 +443,14 @@ const vendorAnalysisData = async (
         status: ORDER_STATUS.completed,
         isDeleted: false,
         endDate: {
-          $gte: new Date(`${selectedRevenueYear}-01-01`),
-          $lt: new Date(`${selectedRevenueYear + 1}-01-01`),
+          $gte: `${selectedRevenueYear}-01-01`,
+          $lt: `${selectedRevenueYear + 1}-01-01`,
         },
       },
     },
     {
       $group: {
-        _id: { $month: '$endDate' },
+        _id: { $toInt: { $substr: ['$endDate', 5, 2] } },
         amount: { $sum: '$totalAmount' },
       },
     },
@@ -465,7 +465,8 @@ const vendorAnalysisData = async (
   ])
 
   const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
-    const rawAmount = monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0
+    const rawAmount =
+      monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0
     const afterCommission = Math.round(rawAmount * 0.97)
     return {
       month: MONTHS[i],

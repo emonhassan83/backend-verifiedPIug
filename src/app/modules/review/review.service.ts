@@ -42,18 +42,18 @@ const createReviews = async (
       throw new AppError(httpStatus.BAD_REQUEST, 'You cannot review yourself')
     }
 
-    // Order already reviewed check
-    const alreadyReviewed = await Reviews.findOne({
-      order: orderId,
-      user: userId,
-    }).session(session)
+    // // Order already reviewed check
+    // const alreadyReviewed = await Reviews.findOne({
+    //   order: orderId,
+    //   user: userId,
+    // }).session(session)
 
-    if (alreadyReviewed) {
-      throw new AppError(
-        httpStatus.BAD_REQUEST,
-        'This order is already reviewed',
-      )
-    }
+    // if (alreadyReviewed) {
+    //   throw new AppError(
+    //     httpStatus.BAD_REQUEST,
+    //     'This order is already reviewed',
+    //   )
+    // }
 
     const { communicationSkills, professionalism, serviceQuality } =
       payload.ratings
