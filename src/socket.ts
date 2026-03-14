@@ -10,6 +10,7 @@ import { Chat } from './app/modules/chat/chat.models'
 import { Message } from './app/modules/messages/messages.models'
 import { chatService } from './app/modules/chat/chat.service'
 import { USER_STATUS } from './app/modules/user/user.constant'
+import { modelType } from './app/modules/chat/chat.interface'
 
 let ioInstance: Server | null = null
 
@@ -117,7 +118,7 @@ const initializeSocketIO = (server: HttpServer) => {
             replyTo: replyTo || null,
           }
 
-          if (chat.type === 'private') {
+          if (chat.modelType === modelType.User) {
             if (!receiver)
               throw new AppError(
                 httpStatus.BAD_REQUEST,

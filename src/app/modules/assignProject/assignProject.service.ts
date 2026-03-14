@@ -11,7 +11,7 @@ import { Order } from '../order/order.models'
 import { ASSIGNMENT_PAYMENT_STATUS, TVendorAssignmentStatus, VENDOR_ASSIGNMENT_STATUS } from './assignProject.constants'
 import { vendorProjectAssignNotify } from './assignProject.utils'
 import { Chat } from '../chat/chat.models'
-import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
+import { CHAT_STATUS } from '../chat/chat.constants'
 import { Participant } from '../participant/participant.models'
 import {
   PARTICIPANT_ROLE,
@@ -22,6 +22,7 @@ import { USER_ROLE, USER_STATUS } from '../user/user.constant'
 import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 import axios from 'axios'
 import config from '../../config'
+import { modelType } from '../chat/chat.interface'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -96,8 +97,8 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
     // =============================================
     // 1. Find if group chat already exists for this project
     let groupChat = await Chat.findOne({
-      project: projectId,
-      type: CHAT_TYPE.group,
+      reference: projectId,
+      modelType: modelType.Project,
       isDeleted: false,
     }).session(session)
 
@@ -106,8 +107,8 @@ const insertIntoDB = async (userId: string, payload: TAssignProject) => {
       ;[groupChat] = await Chat.create(
         [
           {
-            project: projectId,
-            type: CHAT_TYPE.group,
+            reference: projectId,
+            modelType: modelType.Project,
             name: `${order.title} || ${order.finalAmount}`,
             image: null,
             status: CHAT_STATUS.active,
