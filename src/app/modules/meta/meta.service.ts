@@ -336,11 +336,11 @@ const vendorMetaData = async (userId: string) => {
     { $unwind: '$planner' },
     {
       $project: {
-        plannerId: '$_id',
         plannerName: '$planner.name',
         plannerEmail: '$planner.email',
         plannerPhoto: '$planner.photoUrl',
         orderCount: 1,
+        rating: '$planner.avgRating',
         _id: 0,
       },
     },
