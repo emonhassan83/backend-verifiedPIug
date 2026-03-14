@@ -62,8 +62,6 @@ const paystackRecipientSchema = new Schema<TPaystackRecipient>(
 
 // ইনডেক্স যোগ করা
 paystackRecipientSchema.index({ user: 1, isDefault: 1 });
-paystackRecipientSchema.index({ recipientCode: 1 });
-
 
 export const PaystackRecipient = model<TPaystackRecipient, TPaystackRecipientModel>(
   'PaystackRecipient',

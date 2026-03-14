@@ -1,5 +1,11 @@
 import { Model, Types } from 'mongoose'
-import { TChatStatus, TChatType } from './chat.constants'
+import { TChatStatus } from './chat.constants'
+
+export enum modelType {
+  User = 'User',
+  Order = 'Order',
+  Project = 'Project'
+}
 
 interface TParticipant {
   user: Types.ObjectId
@@ -7,8 +13,8 @@ interface TParticipant {
 
 export interface TChat {
   _id?: Types.ObjectId
-  type: TChatType
-  project?: Types.ObjectId | null
+  modelType: modelType
+  reference?: Types.ObjectId | null
   name?: string
   image?: string
   participants?: TParticipant[]

@@ -1,5 +1,5 @@
 import httpStatus from 'http-status'
-import { TChat } from './chat.interface'
+import { modelType, TChat } from './chat.interface'
 import AppError from '../../errors/AppError'
 import { Chat } from './chat.models'
 import { User } from '../user/user.model'
@@ -7,8 +7,11 @@ import { Message } from '../messages/messages.models'
 import { Participant } from '../participant/participant.models'
 import { Types } from 'mongoose'
 import QueryBuilder from '../../builder/QueryBuilder'
-import { CHAT_TYPE, TChatStatus } from './chat.constants'
-import { PARTICIPANT_ROLE } from '../participant/participant.constants'
+import { CHAT_STATUS, TChatStatus } from './chat.constants'
+import {
+  PARTICIPANT_ROLE,
+  PARTICIPANT_STATUS,
+} from '../participant/participant.constants'
 import { uploadToS3 } from '../../utils/s3'
 import { notifyChatParticipants } from './chat.utils'
 
@@ -25,7 +28,7 @@ const createChat = async (payload: TChat, userId: string) => {
   }
 
   // Private chat special check
-  if (restPayload.type === CHAT_TYPE.private && participants!.length !== 1) {
+  if (restPayload.modelType === modelType.User && participants!.length !== 1) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
       'Private chat must have exactly 1 participant',
@@ -75,19 +78,29 @@ const getMyChatList = async (
   userId: string,
   query: Record<string, unknown>,
 ) => {
-  const baseQuery = Chat.find({ isDeleted: false }).populate({
-    path: 'participants.user',
-    select: 'name photoUrl role',
+  // 1. এই user এর সব active chat ids বের করো
+  const myParticipations = await Participant.find({
+    user: new Types.ObjectId(userId),
+    status: PARTICIPANT_STATUS.active,
+  }).select('chat')
+
+  const myChatIds = myParticipations.map((p) => p.chat)
+
+  if (myChatIds.length === 0) {
+    return {
+      meta: { total: 0, page: 1, limit: 10, totalPage: 1 },
+      data: [],
+    }
+  }
+
+  // 2. সেই chat ids দিয়ে Chat find করো
+  const baseQuery = Chat.find({
+    _id: { $in: myChatIds },
+    isDeleted: false,
+    status: CHAT_STATUS.active,
   })
 
   const queryBuilder = new QueryBuilder(baseQuery, query)
-
-  // শুধু যেসব চ্যাটে ইউজার আছে
-  queryBuilder.modelQuery = queryBuilder.modelQuery.find({
-    'participants.user': new Types.ObjectId(userId),
-    'participants.isDeleted': false,
-  })
-
   queryBuilder.filter()
   queryBuilder.sort()
   queryBuilder.paginate()
@@ -95,21 +108,31 @@ const getMyChatList = async (
 
   const chats = await queryBuilder.modelQuery
 
-  // last message + unread count যোগ করা
+  // 3. প্রতিটা chat এ participants, lastMessage, unreadCount যোগ করো
   const enriched = await Promise.all(
     chats.map(async (chat) => {
-      const lastMessage = await Message.findOne({ chat: chat._id })
-        .sort({ createdAt: -1 })
-        .populate('sender', 'name photoUrl')
+      const [participants, lastMessage, unreadCount] = await Promise.all([
+        Participant.find({
+          chat: chat._id,
+          status: PARTICIPANT_STATUS.active,
+        })
+          .populate('user', 'name photoUrl')
+          .select('user'),
 
-      const unreadCount = await Message.countDocuments({
-        chat: chat._id,
-        sender: { $ne: new Types.ObjectId(userId) },
-        seen: false,
-      })
+        Message.findOne({ chat: chat._id })
+          .sort({ createdAt: -1 })
+          .populate('sender', 'name photoUrl'),
+
+        Message.countDocuments({
+          chat: chat._id,
+          sender: { $ne: new Types.ObjectId(userId) },
+          seen: false,
+        }),
+      ])
 
       return {
         ...chat.toObject(),
+        participants,
         lastMessage,
         unreadCount,
       }
@@ -132,7 +155,7 @@ const getChatById = async (chatId: string, requestingUserId: string) => {
   const isParticipant = await Participant.exists({
     chat: chatId,
     user: requestingUserId,
-    isDeleted: false,
+    status: PARTICIPANT_STATUS.active,
   })
   if (!isParticipant) {
     throw new AppError(
@@ -141,7 +164,16 @@ const getChatById = async (chatId: string, requestingUserId: string) => {
     )
   }
 
-  return chat
+  // Participants fetch করো
+  const participants = await Participant.find({
+    chat: chatId,
+    status: PARTICIPANT_STATUS.active,
+  }).populate('user', 'name photoUrl').select('user role status')
+
+  return {
+    ...chat.toObject(),
+    participants,
+  }
 }
 
 // Update chat list
@@ -219,7 +251,7 @@ const updateChatStatus = async (
     { new: true, runValidators: true },
   )
 
-   // 🔔 Notify all participants
+  // 🔔 Notify all participants
   await notifyChatParticipants(
     new Types.ObjectId(id),
     new Types.ObjectId(userId),

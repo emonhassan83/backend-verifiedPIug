@@ -1,6 +1,7 @@
 import { z } from 'zod'
-import { CHAT_STATUS, CHAT_TYPE } from './chat.constants'
+import { CHAT_STATUS } from './chat.constants'
 import { Types } from 'mongoose';
+import { modelType } from './chat.interface';
 
 const objectIdSchema = z.string().refine(val => Types.ObjectId.isValid(val), {
   message: 'Invalid ObjectId',
@@ -8,7 +9,7 @@ const objectIdSchema = z.string().refine(val => Types.ObjectId.isValid(val), {
 
 const createValidation = z.object({
   body: z.object({
-    type: z.enum(Object.values(CHAT_TYPE) as [string, ...string[]], {
+    modelType: z.enum(Object.values(modelType) as [string, ...string[]], {
       required_error: 'Chat type is required!',
     }),
     participants: z.array(

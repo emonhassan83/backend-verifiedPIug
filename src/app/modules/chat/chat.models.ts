@@ -1,18 +1,17 @@
 import { Schema, model } from 'mongoose'
-import { TChat, TChatModel } from './chat.interface'
-import { CHAT_STATUS, CHAT_TYPE } from './chat.constants'
+import { modelType, TChat, TChatModel } from './chat.interface'
+import { CHAT_STATUS } from './chat.constants'
 
 const chatSchema = new Schema<TChat>(
   {
-    project: {
-      type: Schema.Types.ObjectId,
-      ref: 'Project',
-      required: false,
-    },
-    type: {
+    modelType: {
       type: String,
-      enum: Object.values(CHAT_TYPE),
-      required: false,
+      enum: Object.values(modelType),
+    },
+    reference: {
+      type: Schema.Types.ObjectId,
+      refPath: 'modelType',
+      default: null,
     },
     name: {
       type: String,

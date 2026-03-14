@@ -31,7 +31,7 @@ import {
 } from '../participant/participant.constants'
 import { Participant } from '../participant/participant.models'
 import { Chat } from '../chat/chat.models'
-import { CHAT_STATUS, CHAT_TYPE } from '../chat/chat.constants'
+import { CHAT_STATUS } from '../chat/chat.constants'
 import { Withdraw } from '../withdraw/withdraw.model'
 import {
   WITHDRAW_AUTHORITY,
@@ -40,6 +40,7 @@ import {
 } from '../withdraw/withdraw.constant'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 import dayjs from 'dayjs'
+import { modelType } from '../chat/chat.interface'
 
 const checkout = async (payload: TPayment) => {
   const transactionId = generateTransactionId()
@@ -71,7 +72,10 @@ const checkout = async (payload: TPayment) => {
         )
       }
 
-      if (order.status !== ORDER_STATUS.pending && order.status !== ORDER_STATUS.running) {
+      if (
+        order.status !== ORDER_STATUS.pending &&
+        order.status !== ORDER_STATUS.running
+      ) {
         throw new AppError(
           httpStatus.BAD_REQUEST,
           'Can make payment only pending or running order!',
@@ -324,7 +328,8 @@ const confirmPayment = async (query: Record<string, any>) => {
           // ──────────────────────────────────────────────
           let orderChat = await Chat.findOne({
             order: order._id,
-            type: CHAT_TYPE.order,
+            modelType: modelType.Order,
+            reference: order._id,
             isDeleted: false,
           }).session(session)
 
@@ -333,7 +338,8 @@ const confirmPayment = async (query: Record<string, any>) => {
               [
                 {
                   order: order._id,
-                  type: CHAT_TYPE.order,
+                  modelType: modelType.Order,
+                  reference: order._id,
                   name: `Order Chat - ${order.title}`,
                   status: CHAT_STATUS.active,
                   isDeleted: false,
@@ -379,7 +385,8 @@ const confirmPayment = async (query: Record<string, any>) => {
           // ──────────────────────────────────────────────
           let groupChat = await Chat.findOne({
             project: project._id,
-            type: CHAT_TYPE.group,
+            modelType: modelType.Project,
+            reference: project._id,
             isDeleted: false,
           }).session(session)
 
@@ -388,7 +395,8 @@ const confirmPayment = async (query: Record<string, any>) => {
               [
                 {
                   project: project._id,
-                  type: CHAT_TYPE.group,
+                  modelType: modelType.Project,
+                  reference: project._id,
                   name: `Project Group - ${order.title}`,
                   status: CHAT_STATUS.active,
                   isDeleted: false,
