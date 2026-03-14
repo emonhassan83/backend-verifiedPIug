@@ -11,6 +11,7 @@ import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 import {
   authorOrderCountOverview,
   getEarningOverview,
+  MONTHS,
   planerCommonMeta,
   revenueGrowthOverview,
   subscriptionEarning,
@@ -251,12 +252,12 @@ const planerAnalysisEventType = async (userId: string) => {
   // Get common metadata (eventManaged, activeClient, etc.)
   const metaData = await planerCommonMeta(userId)
 
-  // 1. eventAnalysis → type-wise breakdown of planner's orders (as receiver)
+  // 1. eventAnalysis → type-wise breakdown of planner's orders (as sender + authority client)
   const eventAnalysisResult = await Order.aggregate([
     {
       $match: {
         authority: ORDER_AUTHORITY.client,
-        receiver: new mongoose.Types.ObjectId(userId),
+        sender: new mongoose.Types.ObjectId(userId),
         status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
         isDeleted: false,
       },
@@ -388,19 +389,10 @@ const vendorAnalysisData = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
   }
 
-  // Subscription check: only Pro or Elite can access analysis data
-  const { level } = await checkSubscriptionPermission(userId, 'analyticsDashboard');
-  if (level === 'starter') {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'Analysis is only available in Pro or Elite plans. Please upgrade your subscription.'
-    );
-  }
-
   const { revenue_year, satisfaction_year, service_year, booking_year } = query
 
   const totalBookingCount = await Order.countDocuments({
-    receiver: userId,
+    sender: userId,
     authority: ORDER_AUTHORITY.vendor,
     status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
     isDeleted: false,
@@ -424,9 +416,8 @@ const vendorAnalysisData = async (
   ])
 
   const totalAmountAllTime = totalEarningResult[0]?.totalAmount || 0
-  const totalEarningsAfterCommission = totalAmountAllTime * 0.97 // 3% commission deducted
+  const totalEarningsAfterCommission = totalAmountAllTime * 0.97
 
-  // Selected years (default to current year)
   const selectedRevenueYear = revenue_year
     ? parseInt(revenue_year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
@@ -443,9 +434,7 @@ const vendorAnalysisData = async (
     ? parseInt(booking_year as string, 10) || new Date().getFullYear()
     : new Date().getFullYear()
 
-  // ──────────────────────────────────────────────
-  // 1. monthlyRevenue: Revenue per month (completed orders)
-  // ──────────────────────────────────────────────
+  // 1. monthlyRevenue
   const monthlyRevenueAgg = await Order.aggregate([
     {
       $match: {
@@ -453,7 +442,7 @@ const vendorAnalysisData = async (
         authority: ORDER_AUTHORITY.vendor,
         status: ORDER_STATUS.completed,
         isDeleted: false,
-        actualEndDate: {
+        endDate: {
           $gte: new Date(`${selectedRevenueYear}-01-01`),
           $lt: new Date(`${selectedRevenueYear + 1}-01-01`),
         },
@@ -461,7 +450,7 @@ const vendorAnalysisData = async (
     },
     {
       $group: {
-        _id: { $month: '$actualEndDate' },
+        _id: { $month: '$endDate' },
         amount: { $sum: '$totalAmount' },
       },
     },
@@ -475,20 +464,16 @@ const vendorAnalysisData = async (
     { $sort: { month: 1 } },
   ])
 
-  // Fill all 12 months with 0 if missing
   const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
-    const rawAmount =
-      monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0
-    const afterCommission = Math.round(rawAmount * 0.97) // 3% commission deducted
+    const rawAmount = monthlyRevenueAgg.find((m) => m.month === i + 1)?.amount || 0
+    const afterCommission = Math.round(rawAmount * 0.97)
     return {
-      month: i + 1,
+      month: MONTHS[i],
       amount: afterCommission,
     }
   })
 
-  // ──────────────────────────────────────────────
-  // 2. clientSatisfaction: Monthly review count
-  // ──────────────────────────────────────────────
+  // 2. clientSatisfaction
   const clientSatisfactionAgg = await Reviews.aggregate([
     {
       $match: {
@@ -516,13 +501,11 @@ const vendorAnalysisData = async (
   ])
 
   const clientSatisfaction = Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
+    month: MONTHS[i],
     count: clientSatisfactionAgg.find((m) => m.month === i + 1)?.count || 0,
   }))
 
-  // ──────────────────────────────────────────────
-  // 3. servicePopularity: Percentage by order type (all-time)
-  // ──────────────────────────────────────────────
+  // 3. servicePopularity
   const servicePopularityAgg = await Order.aggregate([
     {
       $match: {
@@ -571,9 +554,7 @@ const vendorAnalysisData = async (
 
   const servicePopularity = servicePopularityAgg[0]?.types || []
 
-  // ──────────────────────────────────────────────
-  // 4. bookingTrends: Monthly booking count (orders received)
-  // ──────────────────────────────────────────────
+  // 4. bookingTrends
   const bookingTrendsAgg = await Order.aggregate([
     {
       $match: {
@@ -603,14 +584,13 @@ const vendorAnalysisData = async (
   ])
 
   const bookingTrends = Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
+    month: MONTHS[i],
     count: bookingTrendsAgg.find((m) => m.month === i + 1)?.count || 0,
   }))
 
   return {
     totalBookingCount,
     totalEarnings: Math.round(totalEarningsAfterCommission),
-
     monthlyRevenue,
     clientSatisfaction,
     servicePopularity,

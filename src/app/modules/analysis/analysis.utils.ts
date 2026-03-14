@@ -9,6 +9,18 @@ import { User } from '../user/user.model'
 import { USER_ROLE } from '../user/user.constant'
 import AppError from '../../errors/AppError'
 
+export const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+const fillAllMonths = (data: { month: string; [key: string]: any }[], valueKey: string) => {
+  return MONTHS.map(month => {
+    const found = data.find(d => d.month.toLowerCase() === month)
+    return {
+      month,
+      [valueKey]: found ? found[valueKey] : 0,
+    }
+  })
+}
+
 const getYearRange = (year: number) => ({
   $gte: new Date(`${year}-01-01`),
   $lt: new Date(`${year + 1}-01-01`),
@@ -266,11 +278,8 @@ export const planerCommonMeta = async (userId: string) => {
   }
 }
 
-export const authorOrderCountOverview = async (
-  year: number,
-  userId: string,
-) => {
-  return await Order.aggregate([
+export const authorOrderCountOverview = async (year: number, userId: string) => {
+  const result = await Order.aggregate([
     {
       $match: {
         sender: new mongoose.Types.ObjectId(userId),
@@ -291,18 +300,18 @@ export const authorOrderCountOverview = async (
         month: {
           $switch: {
             branches: [
-              { case: { $eq: ['$_id', 1] }, then: 'January' },
-              { case: { $eq: ['$_id', 2] }, then: 'February' },
-              { case: { $eq: ['$_id', 3] }, then: 'March' },
-              { case: { $eq: ['$_id', 4] }, then: 'April' },
+              { case: { $eq: ['$_id', 1] }, then: 'Jan' },
+              { case: { $eq: ['$_id', 2] }, then: 'Feb' },
+              { case: { $eq: ['$_id', 3] }, then: 'Mar' },
+              { case: { $eq: ['$_id', 4] }, then: 'Apr' },
               { case: { $eq: ['$_id', 5] }, then: 'May' },
-              { case: { $eq: ['$_id', 6] }, then: 'June' },
-              { case: { $eq: ['$_id', 7] }, then: 'July' },
-              { case: { $eq: ['$_id', 8] }, then: 'August' },
-              { case: { $eq: ['$_id', 9] }, then: 'September' },
-              { case: { $eq: ['$_id', 10] }, then: 'October' },
-              { case: { $eq: ['$_id', 11] }, then: 'November' },
-              { case: { $eq: ['$_id', 12] }, then: 'December' },
+              { case: { $eq: ['$_id', 6] }, then: 'Jun' },
+              { case: { $eq: ['$_id', 7] }, then: 'Jul' },
+              { case: { $eq: ['$_id', 8] }, then: 'Aug' },
+              { case: { $eq: ['$_id', 9] }, then: 'Sep' },
+              { case: { $eq: ['$_id', 10] }, then: 'Oct' },
+              { case: { $eq: ['$_id', 11] }, then: 'Nov' },
+              { case: { $eq: ['$_id', 12] }, then: 'Dec' },
             ],
             default: 'Unknown',
           },
@@ -313,6 +322,8 @@ export const authorOrderCountOverview = async (
     },
     { $sort: { _id: 1 } },
   ])
+
+  return fillAllMonths(result, 'count')
 }
 
 export const vendorOrderResult = async (year: number, userId: string) => {
@@ -354,7 +365,7 @@ export const vendorOrderResult = async (year: number, userId: string) => {
 }
 
 export const revenueGrowthOverview = async (year: number, userId: string) => {
-  return await Payment.aggregate([
+  const result = await Payment.aggregate([
     {
       $match: {
         author: new mongoose.Types.ObjectId(userId),
@@ -375,18 +386,18 @@ export const revenueGrowthOverview = async (year: number, userId: string) => {
         month: {
           $switch: {
             branches: [
-              { case: { $eq: ['$_id', 1] }, then: 'January' },
-              { case: { $eq: ['$_id', 2] }, then: 'February' },
-              { case: { $eq: ['$_id', 3] }, then: 'March' },
-              { case: { $eq: ['$_id', 4] }, then: 'April' },
+              { case: { $eq: ['$_id', 1] }, then: 'Jan' },
+              { case: { $eq: ['$_id', 2] }, then: 'Feb' },
+              { case: { $eq: ['$_id', 3] }, then: 'Mar' },
+              { case: { $eq: ['$_id', 4] }, then: 'Apr' },
               { case: { $eq: ['$_id', 5] }, then: 'May' },
-              { case: { $eq: ['$_id', 6] }, then: 'June' },
-              { case: { $eq: ['$_id', 7] }, then: 'July' },
-              { case: { $eq: ['$_id', 8] }, then: 'August' },
-              { case: { $eq: ['$_id', 9] }, then: 'September' },
-              { case: { $eq: ['$_id', 10] }, then: 'October' },
-              { case: { $eq: ['$_id', 11] }, then: 'November' },
-              { case: { $eq: ['$_id', 12] }, then: 'December' },
+              { case: { $eq: ['$_id', 6] }, then: 'Jun' },
+              { case: { $eq: ['$_id', 7] }, then: 'Jul' },
+              { case: { $eq: ['$_id', 8] }, then: 'Aug' },
+              { case: { $eq: ['$_id', 9] }, then: 'Sep' },
+              { case: { $eq: ['$_id', 10] }, then: 'Oct' },
+              { case: { $eq: ['$_id', 11] }, then: 'Nov' },
+              { case: { $eq: ['$_id', 12] }, then: 'Dec' },
             ],
             default: 'Unknown',
           },
@@ -397,4 +408,6 @@ export const revenueGrowthOverview = async (year: number, userId: string) => {
     },
     { $sort: { _id: 1 } },
   ])
+
+  return fillAllMonths(result, 'amount')
 }
