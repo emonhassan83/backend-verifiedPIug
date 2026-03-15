@@ -191,7 +191,7 @@ const getMyChatList = async (
 
         Message.findOne({ chat: chat._id })
           .sort({ createdAt: -1 })
-          .populate('sender', 'name').select('text imageUrl sender createdAt'),
+          .populate('sender', 'name').select('text imageUrl sender seen createdAt'),
 
         Message.countDocuments({
           chat: chat._id,
