@@ -187,7 +187,7 @@ const getMyChatList = async (
         Participant.find({
           chat: chat._id,
           status: PARTICIPANT_STATUS.active,
-        }).populate('user', 'name photoUrl'),
+        }).populate('user', 'name photoUrl').select('user'),
 
         Message.findOne({ chat: chat._id })
           .sort({ createdAt: -1 })
