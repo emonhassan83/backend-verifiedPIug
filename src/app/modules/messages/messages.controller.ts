@@ -29,13 +29,14 @@ const createMessages = catchAsync(async (req: Request, res: Response) => {
 
 // Get messages by chat ID
 const getMessagesByChatId = catchAsync(async (req: Request, res: Response) => {
-  const result = await messagesService.getMessagesByChatId(req.params.chatId)
+  const result = await messagesService.getMessagesByChatId(req.query, req.params.chatId)
 
   sendResponse(res, {
     statusCode: 200,
     success: true,
     message: 'Messages retrieved successfully',
-    data: result,
+    meta: result.meta,
+    data: result.data,
   })
 })
 

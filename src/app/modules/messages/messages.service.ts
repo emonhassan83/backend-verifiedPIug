@@ -64,31 +64,44 @@ const updateMessages = async (id: string, payload: Partial<TMessages>) => {
 }
 
 // Get messages by chat ID
-const getMessagesByChatId = async (chatId: string) => {
-  const result = await Message.find({ chat: chatId }).sort({ createdAt: 1 }).populate([
-    {
-      path: 'sender',
-      select: 'name email photoUrl _id',
-    },
-    {
-      path: 'receiver',
-      select: 'name email photoUrl _id',
-    },
-  ])
-  return result
-}
+const getMessagesByChatId = async (
+  query: Record<string, any>,
+  chatId: string,
+) => {
+  const messageQuery = new QueryBuilder(
+    Message.find({ chat: chatId })
+      .populate([
+        {
+          path: 'sender',
+          select: 'name firstName lastName photoUrl _id',
+        },
+      ])
+      .select('text imageUrl seen sender createdAt')
+      .sort({ createdAt: -1 }),
+    query,
+  )
+    .filter()
+    .paginate()
+    .fields()
 
+  const messages = await messageQuery.modelQuery
+  const meta = await messageQuery.countTotal()
+
+  // ✅ UI এর জন্য পুরনো থেকে নতুন order এ দাও
+  const orderedMessages = [...messages].reverse()
+
+  return {
+    meta,
+    data: orderedMessages,
+  }
+}
 // Get message by ID
 const getMessagesById = async (id: string) => {
   const result = await Message.findById(id).populate([
     {
       path: 'sender',
-      select: 'name email photoUrl _id',
-    },
-    {
-      path: 'receiver',
-      select: 'name email photoUrl _id',
-    },
+      select: 'name photoUrl _id',
+    }
   ])
   if (!result) {
     throw new AppError(httpStatus.NOT_FOUND, 'Oops! Message not found')

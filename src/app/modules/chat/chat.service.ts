@@ -171,7 +171,7 @@ const getMyChatList = async (
     _id: { $in: myChatIds },
     isDeleted: false,
     status: CHAT_STATUS.active,
-  })
+  }).select('modelType name image status createdAt')
 
   const queryBuilder = new QueryBuilder(baseQuery, restQuery)
   queryBuilder.filter()
@@ -191,7 +191,7 @@ const getMyChatList = async (
 
         Message.findOne({ chat: chat._id })
           .sort({ createdAt: -1 })
-          .populate('sender', 'name photoUrl'),
+          .populate('sender', 'name').select('text imageUrl sender createdAt'),
 
         Message.countDocuments({
           chat: chat._id,

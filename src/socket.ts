@@ -11,6 +11,7 @@ import { Message } from './app/modules/messages/messages.models'
 import { chatService } from './app/modules/chat/chat.service'
 import { USER_STATUS } from './app/modules/user/user.constant'
 import { modelType } from './app/modules/chat/chat.interface'
+import { PARTICIPANT_STATUS } from './app/modules/participant/participant.constants'
 
 let ioInstance: Server | null = null
 
@@ -86,7 +87,8 @@ const initializeSocketIO = (server: HttpServer) => {
       socket.on('send-message', async (payload, callback) => {
         try {
           const { chatId, text, imageUrl = [], replyTo } = payload
-          // ✅ receiver বাদ
+
+          console.log('📨 send-message received:', { chatId, text, userId })
 
           if (!chatId || !text?.trim()) {
             return callbackFn(callback, {
@@ -98,9 +100,11 @@ const initializeSocketIO = (server: HttpServer) => {
           const participant = await Participant.findOne({
             chat: chatId,
             user: userId,
-            isDeleted: false,
-            status: 'active',
+            status: PARTICIPANT_STATUS.active,
           })
+
+          console.log('👤 participant found:', participant?._id || 'NOT FOUND')
+
           if (!participant) {
             throw new AppError(
               httpStatus.FORBIDDEN,
@@ -109,9 +113,10 @@ const initializeSocketIO = (server: HttpServer) => {
           }
 
           const chat = await Chat.findById(chatId)
+          console.log('💬 chat found:', chat?._id || 'NOT FOUND')
+
           if (!chat) throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
 
-          // ✅ receiver ছাড়া message create করো
           const message = await Message.create({
             chat: chatId,
             sender: userId,
@@ -120,20 +125,30 @@ const initializeSocketIO = (server: HttpServer) => {
             replyTo: replyTo || null,
           })
 
+          console.log('✅ message created:', message._id)
+
           const populated = await Message.findById(message._id).populate(
             'sender',
-            'name photoUrl firstName lastName',
+            'name photoUrl',
           )
 
-          // ✅ সব participant রা message পাবে
-          ioInstance!.to(`chat:${chatId}`).emit('new-message', populated)
+          // ✅ room এ কতজন আছে দেখো
+          const room = ioInstance!.sockets.adapter.rooms.get(`chat:${chatId}`)
+          console.log(`🏠 chat:${chatId} room members:`, room ? room.size : 0)
+          console.log(`🏠 room socket ids:`, room ? [...room] : [])
 
-          // Chat list update করো সব member এর জন্য
+          ioInstance!.to(`chat:${chatId}`).emit('new-message', populated)
+          console.log('📤 new-message emitted to room:', `chat:${chatId}`)
+
           const chatMembers = await Participant.find({
             chat: chatId,
-            isDeleted: false,
-            status: 'active',
+            status: PARTICIPANT_STATUS.active,
           }).select('user')
+
+          console.log(
+            '👥 chat members:',
+            chatMembers.map((m) => m.user.toString()),
+          )
 
           for (const member of chatMembers) {
             const memberId = member.user.toString()
@@ -141,6 +156,7 @@ const initializeSocketIO = (server: HttpServer) => {
             ioInstance!
               .to(`user:${memberId}`)
               .emit(`chat-list::${memberId}`, list)
+            console.log(`📋 chat-list emitted to user:${memberId}`)
           }
 
           callbackFn(callback, {
@@ -150,6 +166,7 @@ const initializeSocketIO = (server: HttpServer) => {
             data: populated,
           })
         } catch (err: any) {
+          console.error('❌ send-message error:', err.message)
           callbackFn(callback, { success: false, message: err.message })
         }
       })
