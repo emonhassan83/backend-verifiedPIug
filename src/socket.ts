@@ -67,7 +67,7 @@ const initializeSocketIO = (server: HttpServer) => {
       ioInstance!.emit('onlineUser', globalOnline.size)
 
       // =============================================
-      // EVENT: my-chat-list (private + group)
+      // EVENT: my-chat-list
       // =============================================
       socket.on('my-chat-list', async (_, callback) => {
         try {
@@ -81,11 +81,12 @@ const initializeSocketIO = (server: HttpServer) => {
       })
 
       // =============================================
-      // EVENT: send-message (private or group)
+      // EVENT: send-message
       // =============================================
       socket.on('send-message', async (payload, callback) => {
         try {
-          const { chatId, text, imageUrl = [], receiver, replyTo } = payload
+          const { chatId, text, imageUrl = [], replyTo } = payload
+          // ✅ receiver বাদ
 
           if (!chatId || !text?.trim()) {
             return callbackFn(callback, {
@@ -110,35 +111,30 @@ const initializeSocketIO = (server: HttpServer) => {
           const chat = await Chat.findById(chatId)
           if (!chat) throw new AppError(httpStatus.NOT_FOUND, 'Chat not found')
 
-          const messageData: any = {
+          // ✅ receiver ছাড়া message create করো
+          const message = await Message.create({
             chat: chatId,
             sender: userId,
             text,
             imageUrl,
             replyTo: replyTo || null,
-          }
+          })
 
-          if (chat.modelType === modelType.User) {
-            if (!receiver)
-              throw new AppError(
-                httpStatus.BAD_REQUEST,
-                'receiver required for private chat',
-              )
-            messageData.receiver = receiver
-          }
+          const populated = await Message.findById(message._id).populate(
+            'sender',
+            'name photoUrl firstName lastName',
+          )
 
-          const message = await Message.create(messageData)
-
-          const populated = await Message.findById(message._id)
-            .populate('sender', 'name photoUrl')
-            .populate('receiver', 'name photoUrl')
-
+          // ✅ সব participant রা message পাবে
           ioInstance!.to(`chat:${chatId}`).emit('new-message', populated)
 
+          // Chat list update করো সব member এর জন্য
           const chatMembers = await Participant.find({
             chat: chatId,
             isDeleted: false,
+            status: 'active',
           }).select('user')
+
           for (const member of chatMembers) {
             const memberId = member.user.toString()
             const list = await chatService.getMyChatList(memberId, {})
