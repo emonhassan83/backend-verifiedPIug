@@ -16,8 +16,6 @@ export const sendUserStatusNotifYToAdmin = async (
   const admin = await findAdmin()
   if (!admin || !admin?.fcmToken) return
 
-  if (!canSendNotification(user, category)) return
-
   let message = ''
   let description = ''
 
