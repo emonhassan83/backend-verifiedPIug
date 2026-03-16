@@ -4,15 +4,8 @@ import QueryBuilder from '../../builder/QueryBuilder'
 import { Refund } from './refund.model'
 import { User } from '../user/user.model'
 import { refundChangeStatusNotifyToUser } from './refund.utils'
-import { Order } from '../order/order.models'
-import { ORDER_STATUS, PAYMENT_STATUS } from '../order/order.constants'
 import { REFUND_STATUS, TRefundStatus } from './refund.constant'
 import { startSession } from 'mongoose'
-import { Payment } from '../payment/payment.model'
-import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
-import { refundPaystackPayment } from '../payment/payment.utils'
-import { Project } from '../project/project.models'
-import { PROJECT_STATUS } from '../project/project.constants'
 import { TRefund } from './refund.interface'
 
 const getAllRefundsFromDB = async (query: Record<string, unknown>) => {
@@ -88,13 +81,13 @@ const updateRefundStatusFromDB = async (
       throw new AppError(httpStatus.NOT_FOUND, 'Refund request not found!')
     }
 
-    // 4. Prevent invalid transitions
-    if (refund.status !== REFUND_STATUS.pending) {
-      throw new AppError(
-        httpStatus.FORBIDDEN,
-        `Refund request already ${refund.status}. Cannot change status again.`,
-      )
-    }
+    // // 4. Prevent invalid transitions
+    // if (refund.status !== REFUND_STATUS.pending) {
+    //   throw new AppError(
+    //     httpStatus.FORBIDDEN,
+    //     `Refund request already ${refund.status}. Cannot change status again.`,
+    //   )
+    // }
 
     // 5. Change then update the refund status
     const result = await Refund.findByIdAndUpdate(
