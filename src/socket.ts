@@ -9,8 +9,6 @@ import { Participant } from './app/modules/participant/participant.models'
 import { Chat } from './app/modules/chat/chat.models'
 import { Message } from './app/modules/messages/messages.models'
 import { chatService } from './app/modules/chat/chat.service'
-import { USER_STATUS } from './app/modules/user/user.constant'
-import { modelType } from './app/modules/chat/chat.interface'
 import { PARTICIPANT_STATUS } from './app/modules/participant/participant.constants'
 
 let ioInstance: Server | null = null
@@ -48,8 +46,7 @@ const initializeSocketIO = (server: HttpServer) => {
       // Auto-join all active chats
       const userChats = await Participant.find({
         user: userId,
-        isDeleted: false,
-        status: USER_STATUS.active,
+        status: PARTICIPANT_STATUS.active,
       }).select('chat')
 
       userChats.forEach((p) => {
