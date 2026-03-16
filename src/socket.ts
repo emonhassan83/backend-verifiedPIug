@@ -87,10 +87,17 @@ const initializeSocketIO = (server: HttpServer) => {
 
           console.log('📨 send-message received:', { chatId, text, userId })
 
-          if (!chatId || !text?.trim()) {
+          if (!chatId) {
             return callbackFn(callback, {
               success: false,
-              message: 'chatId and text required',
+              message: 'chatId is required',
+            })
+          }
+
+          if (!text?.trim() && (!imageUrl || imageUrl.length === 0)) {
+            return callbackFn(callback, {
+              success: false,
+              message: 'text or imageUrl is required',
             })
           }
 
