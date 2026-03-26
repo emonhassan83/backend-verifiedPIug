@@ -22,9 +22,9 @@ export interface IIdentityVerification {
 }
 
 export interface IBankInfo {
-  bankName: string
+  accountName: string
   accountNumber: string
-  tinOrNID: string
+  bankCode: string
 }
 
 export interface TVerification {

@@ -24,9 +24,9 @@ const identityZod = z.object({
 
 // Bank Info
 const bankInfoZod = z.object({
-  bankName: z.string({ required_error: "Bank name is required" }),
+  accountName: z.string({ required_error: "Bank account name is required" }),
   accountNumber: z.string({ required_error: "Account number is required" }),
-  tinOrNID: z.string({ required_error: "TIN/NID is required" }),
+  bankCode: z.string({ required_error: "Bank code is required" }),
 });
 
 // CREATE Validation
