@@ -7,12 +7,14 @@ import {
   TNotifyCategory,
 } from '../notification/notification.utils'
 import { TUser } from '../user/user.interface'
+import { TAssignProject } from './assignProject.interface'
 
 export const vendorProjectAssignNotify = async (
   user: TUser,
   order: any,
-  status: keyof typeof VENDOR_ASSIGNMENT_STATUS,
+  status: keyof typeof VENDOR_ASSIGNMENT_STATUS | 'make_as_payment',
   category: TNotifyCategory,
+  assignProject?: TAssignProject | null,
 ) => {
   if (!canSendNotification(user, category)) return
 
@@ -25,9 +27,9 @@ export const vendorProjectAssignNotify = async (
       description = `Your assignment project "${order.title}" has been assigned to you. Please check your dashboard for details.`
       break
 
-    case VENDOR_ASSIGNMENT_STATUS.inProgress:
+    case 'make_as_payment':
       message = messages.projectAssign.statusChanged
-      description = `Congratulations! Your assignment project "${order.title}" is now in progress!`
+      description = `You received ₦${assignProject!.agreedAmount.toLocaleString()} for completing the project.!`
       break
 
     case VENDOR_ASSIGNMENT_STATUS.completed:

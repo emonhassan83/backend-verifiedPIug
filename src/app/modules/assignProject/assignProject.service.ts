@@ -23,6 +23,8 @@ import { checkSubscriptionPermission } from '../../utils/subscription.utils'
 import axios from 'axios'
 import config from '../../config'
 import { modelType } from '../chat/chat.interface'
+import { Withdraw } from '../withdraw/withdraw.model'
+import { WITHDRAW_AUTHORITY, WITHDRAW_METHOD, WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -195,6 +197,7 @@ const getAllIntoDB = async (query: Record<string, any>) => {
   }
 }
 
+
 // Make a payment to a vendor for a project
 const makeAVendorPayment = async (id: string, userId: string) => {
   const session = await mongoose.startSession();
@@ -300,20 +303,45 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       { new: true, session }
     );
 
-    // 9. Commit transaction
+    // 🔥 9. CREATE WITHDRAW RECORD for vendor
+    const withdrawRecord = await Withdraw.create(
+      [
+        {
+          user: vendor._id, // Vendor who receives payment
+          order: assignProject.vendorOrder, // Project reference
+          reference: assignProject._id, // AssignProject as payment reference
+          authority: WITHDRAW_AUTHORITY.vendor,
+          method: WITHDRAW_METHOD.playstack,
+          amount: assignProject.agreedAmount,
+          paystackTransferId: transferData.id || transferData.transfer_code,
+          recipientCode: vendor.playstackRecipientCode,
+          note: `Payment received from planner for project services: ${assignProject.serviceType?.join(', ')}`,
+          proceedAt: new Date(),
+          status: WITHDRAW_STATUS.completed,
+        },
+      ],
+      { session }
+    );
+
+    // 10. Commit transaction
     await session.commitTransaction();
 
     // Optional: Send notification to both parties
-    // await vendorPaymentSuccessNotify(
-    //   vendor._id,
-    //   updatedAssignProject,
-    //   assignProject.agreedAmount
-    // );
+    await vendorProjectAssignNotify(
+      vendor._id,
+      assignProject.vendorOrder,
+      'make_as_payment',
+      'bookings',
+      updatedAssignProject
+    );
 
     return {
       success: true,
       message: 'Payment successfully transferred to vendor',
-      data: updatedAssignProject,
+      data: {
+        assignProject: updatedAssignProject,
+        withdraw: withdrawRecord[0],
+      },
       transferId: transferData.id,
     };
   } catch (error: any) {
