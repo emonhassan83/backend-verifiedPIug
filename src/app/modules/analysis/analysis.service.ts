@@ -622,34 +622,32 @@ const planerLeadsData = async (
   const limit = parseInt(query.limit as string) || 10
   const skip = (page - 1) * limit
 
-  // Correct base condition: planner is the sender (placed the order), authority is client
+  // Base filter: planner is the sender, authority is client
   const baseMatch = {
-    sender: new mongoose.Types.ObjectId(userId), // Planner is the sender
-    authority: ORDER_AUTHORITY.client, // Order received from client
+    sender: new mongoose.Types.ObjectId(userId),
+    authority: ORDER_AUTHORITY.client,
     isDeleted: false,
   }
 
-  // ──────────────────────────────────────────────
-  // 1. New Leads: First-time clients (unique receivers with exactly 1 order)
-  // ──────────────────────────────────────────────
+  // ────────────────────────────────
+  // 1. Stats: New, Contracted, Qualified, Left
+  // ────────────────────────────────
+
+  // New leads: receivers with exactly 1 order
   const newLeadsAgg = await Order.aggregate([
-    { $match: { ...baseMatch } },
+    { $match: baseMatch },
     {
       $group: {
-        _id: '$receiver', // Group by client (receiver)
+        _id: '$receiver',
         orderCount: { $sum: 1 },
-        firstOrder: { $min: '$createdAt' },
       },
     },
     { $match: { orderCount: 1 } },
     { $count: 'total' },
   ])
-
   const newLeadsCount = newLeadsAgg[0]?.total || 0
 
-  // ──────────────────────────────────────────────
-  // 2. Contracted: Clients with at least one pending/running/completed order
-  // ──────────────────────────────────────────────
+  // Contracted: receivers with at least 1 pending/running/completed order
   const contractedAgg = await Order.aggregate([
     {
       $match: {
@@ -663,19 +661,12 @@ const planerLeadsData = async (
         },
       },
     },
-    {
-      $group: {
-        _id: '$receiver',
-      },
-    },
+    { $group: { _id: '$receiver' } },
     { $count: 'total' },
   ])
-
   const contractedCount = contractedAgg[0]?.total || 0
 
-  // ──────────────────────────────────────────────
-  // 3. Qualified: Clients with at least one running/completed order
-  // ──────────────────────────────────────────────
+  // Qualified: receivers with at least 1 running/completed order
   const qualifiedAgg = await Order.aggregate([
     {
       $match: {
@@ -683,26 +674,18 @@ const planerLeadsData = async (
         status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
       },
     },
-    {
-      $group: {
-        _id: '$receiver',
-      },
-    },
+    { $group: { _id: '$receiver' } },
     { $count: 'total' },
   ])
-
   const qualifiedCount = qualifiedAgg[0]?.total || 0
 
-  // ──────────────────────────────────────────────
-  // 4. Left: Clients whose ALL orders are cancelled/denied/refunded
-  // ──────────────────────────────────────────────
+  // Left: receivers whose ALL orders are cancelled/denied/refunded
   const leftAgg = await Order.aggregate([
     { $match: baseMatch },
     {
       $group: {
         _id: '$receiver',
         statuses: { $addToSet: '$status' },
-        orderCount: { $sum: 1 },
       },
     },
     {
@@ -731,30 +714,29 @@ const planerLeadsData = async (
     },
     { $count: 'total' },
   ])
-
   const leftCount = leftAgg[0]?.total || 0
 
-  // ──────────────────────────────────────────────
-  // 5. Lead List — filtered by tab
-  // ──────────────────────────────────────────────
-  let matchFilter: any = { ...baseMatch }
+  // ────────────────────────────────
+  // 2. Lead List (receiver-level)
+  // ────────────────────────────────
+
+  let filteredReceivers: mongoose.Types.ObjectId[] = []
 
   switch (tab) {
     case 'new':
-      // First-time clients (only 1 order total)
-      const firstTimeReceivers = await Order.aggregate([
-        { $match: baseMatch },
-        { $group: { _id: '$receiver', count: { $sum: 1 } } },
-        { $match: { count: 1 } },
-        { $project: { _id: 0, receiver: '$_id' } },
-      ]).then((r) => r.map((s) => s.receiver))
-
-      matchFilter.receiver = { $in: firstTimeReceivers }
+      // receivers with exactly 1 order
+      filteredReceivers = (
+        await Order.aggregate([
+          { $match: baseMatch },
+          { $group: { _id: '$receiver', count: { $sum: 1 } } },
+          { $match: { count: 1 } },
+        ])
+      ).map((r) => r._id)
       break
 
     case 'contacted':
-      // Has at least one pending/running/completed
-      const contactedReceivers = await Order.distinct('receiver', {
+      // receivers with at least 1 pending/running/completed order
+      filteredReceivers = await Order.distinct('receiver', {
         ...baseMatch,
         status: {
           $in: [
@@ -764,77 +746,100 @@ const planerLeadsData = async (
           ],
         },
       })
-      matchFilter.receiver = { $in: contactedReceivers }
       break
 
     case 'qualified':
-      // Has at least one running/completed
-      const qualifiedReceivers = await Order.distinct('receiver', {
+      // receivers with at least 1 running/completed order
+      filteredReceivers = await Order.distinct('receiver', {
         ...baseMatch,
         status: { $in: [ORDER_STATUS.running, ORDER_STATUS.completed] },
       })
-      matchFilter.receiver = { $in: qualifiedReceivers }
       break
 
     case 'cancel':
-      // Only cancelled/denied/refunded
-      const cancelReceivers = await Order.aggregate([
-        { $match: baseMatch },
-        {
-          $group: {
-            _id: '$receiver',
-            hasActive: {
-              $sum: {
-                $cond: [
-                  {
-                    $in: [
-                      '$status',
-                      [
-                        ORDER_STATUS.pending,
-                        ORDER_STATUS.running,
-                        ORDER_STATUS.completed,
+      // receivers with only cancelled/denied/refunded orders
+      filteredReceivers = (
+        await Order.aggregate([
+          { $match: baseMatch },
+          {
+            $group: {
+              _id: '$receiver',
+              hasActive: {
+                $sum: {
+                  $cond: [
+                    {
+                      $in: [
+                        '$status',
+                        [
+                          ORDER_STATUS.pending,
+                          ORDER_STATUS.running,
+                          ORDER_STATUS.completed,
+                        ],
                       ],
-                    ],
-                  },
-                  1,
-                  0,
-                ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
               },
             },
           },
-        },
-        { $match: { hasActive: 0 } },
-        { $project: { _id: 0, receiver: '$_id' } },
-      ]).then((r) => r.map((s) => s.receiver))
-
-      matchFilter.receiver = { $in: cancelReceivers }
+          { $match: { hasActive: 0 } },
+        ])
+      ).map((r) => r._id)
       break
 
     default:
       throw new AppError(httpStatus.BAD_REQUEST, 'Invalid tab value')
   }
 
-  const leadList = await Order.find(matchFilter)
-    .select(
-      'title type shortDescription startDate address location locationUrl receiver sender',
-    )
-    .populate({
-      path: 'receiver',
-      select: 'name photoUrl',
-    })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean()
+  // Fetch latest order per receiver
+  const leadListAgg = await Order.aggregate([
+    { $match: { ...baseMatch, receiver: { $in: filteredReceivers } } },
+    { $sort: { createdAt: -1 } }, // latest first
+    {
+      $group: {
+        _id: '$receiver',
+        latestOrderId: { $first: '$_id' },
+        title: { $first: '$title' },
+        type: { $first: '$type' },
+        shortDescription: { $first: '$shortDescription' },
+        startDate: { $first: '$startDate' },
+        address: { $first: '$address' },
+        location: { $first: '$location' },
+        locationUrl: { $first: '$locationUrl' },
+        sender: { $first: '$sender' },
+      },
+    },
+    { $skip: skip },
+    { $limit: limit },
+  ])
 
-  const totalLeads = await Order.countDocuments(matchFilter)
+  // Populate receiver info
+  const leadListPopulated = await User.populate(leadListAgg, {
+    path: '_id',
+    select: 'name photoUrl',
+  })
+
+  const leadList = (leadListPopulated as unknown as any[]).map((l) => ({
+    _id: l.latestOrderId,
+    title: l.title,
+    type: l.type,
+    shortDescription: l.shortDescription,
+    startDate: l.startDate,
+    address: l.address,
+    location: l.location,
+    locationUrl: l.locationUrl,
+    sender: l.sender,
+    receiver: l._id,
+  }))
 
   return {
     meta: {
       page,
       limit,
-      total: totalLeads,
-      totalPages: Math.ceil(totalLeads / limit),
+      total: filteredReceivers.length,
+      totalPages: Math.ceil(filteredReceivers.length / limit),
     },
     data: {
       newLeads: newLeadsCount,

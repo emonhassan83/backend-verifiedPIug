@@ -144,7 +144,7 @@ const planerMetaData = async (userId: string) => {
   })
 
   const upcomingEventCount = await Order.countDocuments({
-    receiver: userId,
+    sender: userId,
     authority: ORDER_AUTHORITY.client,
     status: { $in: [ORDER_STATUS.running, ORDER_STATUS.pending] },
     startDate: { $gte: todayStr },
@@ -154,22 +154,19 @@ const planerMetaData = async (userId: string) => {
   const newLeadCount = await Order.aggregate([
     {
       $match: {
-        receiver: new mongoose.Types.ObjectId(userId),
-        status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
+        sender: new mongoose.Types.ObjectId(userId), // Planner is the sender
+        authority: ORDER_AUTHORITY.client, // Order received from client
         isDeleted: false,
       },
     },
     {
       $group: {
-        _id: '$sender',
+        _id: '$receiver', // Group by client (receiver)
         orderCount: { $sum: 1 },
+        firstOrder: { $min: '$createdAt' },
       },
     },
-    {
-      $match: {
-        orderCount: 1, // only first-time clients
-      },
-    },
+    { $match: { orderCount: 1 } },
     {
       $count: 'newLeads',
     },
@@ -180,7 +177,7 @@ const planerMetaData = async (userId: string) => {
     {
       $match: {
         modelType: PAYMENT_MODEL_TYPE.Order,
-        reference: { $in: await Order.distinct('_id', { receiver: userId }) },
+        reference: { $in: await Order.distinct('_id', { sender: userId }) },
         status: PAYMENT_STATUS.paid,
         isPaid: true,
         isDeleted: false,
@@ -196,7 +193,7 @@ const planerMetaData = async (userId: string) => {
 
   // 3. Upcoming event data (last 5 upcoming/running orders with startDate >= today)
   const upcomingEvents = await Order.find({
-    receiver: userId,
+    sender: userId,
     authority: ORDER_AUTHORITY.client,
     status: { $in: [ORDER_STATUS.running, ORDER_STATUS.pending] },
     startDate: { $gte: todayStr },
