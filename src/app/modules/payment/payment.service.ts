@@ -123,8 +123,6 @@ const checkout = async (payload: TPayment) => {
     let paymentData = await Payment.findOne({
       reference,
       user: userId,
-      type,
-      isPaid: false,
     }).session(session)
 
     let finalAmount: number
