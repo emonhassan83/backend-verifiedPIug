@@ -33,7 +33,7 @@ const identityVerificationSchema = new Schema(
 
 const bankInfoSchema = new Schema(
   {
-    bankName: { type: String, required: true },
+    accountName: { type: String, required: true },
     accountNumber: { type: String, required: true },
     bankCode: { type: String, required: true },
   },
