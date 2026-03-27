@@ -61,7 +61,6 @@ const getActiveServices = catchAsync(async (req: Request, res: Response) => {
 
 const getMyServices = catchAsync(async (req: Request, res: Response) => {
   req.query['author'] = req.user._id
-  req.query['status'] = SERVICE_STATUS.active
   const result = await ServiceService.getAllIntoDB(req.query, req.user._id)
 
   sendResponse(res, {
