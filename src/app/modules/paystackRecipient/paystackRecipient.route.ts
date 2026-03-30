@@ -4,12 +4,14 @@ import auth from '../../middleware/auth'
 import { USER_ROLE } from '../user/user.constant'
 import { PaystackRecipientController } from './paystackRecipient.controller'
 import { PaystackRecipientValidation } from './paystackRecipient.validation'
+import parseData from '../../middleware/parseData'
 
 const router = express.Router()
 
 router.post(
   '/connect',
   auth(USER_ROLE.vendor, USER_ROLE.planer),
+  parseData(),
   zodValidationRequest(PaystackRecipientValidation.createValidationSchema),
   PaystackRecipientController.connectAccount,
 )
