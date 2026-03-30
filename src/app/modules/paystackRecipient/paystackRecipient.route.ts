@@ -11,7 +11,6 @@ const router = express.Router()
 router.post(
   '/connect',
   auth(USER_ROLE.vendor, USER_ROLE.planer),
-  parseData(),
   zodValidationRequest(PaystackRecipientValidation.createValidationSchema),
   PaystackRecipientController.connectAccount,
 )
