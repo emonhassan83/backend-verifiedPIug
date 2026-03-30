@@ -277,8 +277,8 @@ const makeAVendorPayment = async (id: string, userId: string) => {
 
     if (!transferResponse.data.status) {
       throw new AppError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Paystack transfer failed. Please try again.'
+        httpStatus.BAD_REQUEST,
+        transferResponse.data.message || 'Paystack transfer failed'
       );
     }
 
