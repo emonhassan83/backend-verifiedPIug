@@ -247,7 +247,8 @@ const makeAVendorPayment = async (id: string, userId: string) => {
     // 5. Get vendor's Paystack recipient code
     const vendor = assignProject.vendor as any
     const vendorRecipient =  await PaystackRecipient.findOne({
-      user: vendor,
+      user: vendor._id,
+      isDefault: true,
       isDeleted: false,
     }).session(session)
     if (!vendorRecipient || !vendorRecipient.recipientCode) {
@@ -263,7 +264,7 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       {
         source: 'balance',
         amount: assignProject.agreedAmount * 100, // kobo
-        recipient: vendor.playstackRecipientCode,
+        recipient: vendorRecipient.recipientCode,
         reason: `Payment for project ${assignProject.project?._id} - ${assignProject.serviceType?.join(', ')}`,
       },
       {
