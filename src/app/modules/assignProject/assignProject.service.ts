@@ -25,6 +25,7 @@ import config from '../../config'
 import { modelType } from '../chat/chat.interface'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_AUTHORITY, WITHDRAW_METHOD, WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
+import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -244,8 +245,12 @@ const makeAVendorPayment = async (id: string, userId: string) => {
     }
 
     // 5. Get vendor's Paystack recipient code
-    const vendor = assignProject.vendor as any;
-    if (!vendor || !vendor.playstackRecipientCode) {
+    const vendor = assignProject.vendor as any
+    const vendorRecipient =  await PaystackRecipient.findOne({
+      user: vendor,
+      isDeleted: false,
+    }).session(session)
+    if (!vendorRecipient || !vendorRecipient.recipientCode) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
         'Vendor has not connected their Paystack account yet'
