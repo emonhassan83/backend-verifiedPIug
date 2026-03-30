@@ -241,14 +241,12 @@ const makeAVendorPayment = async (id: string, userId: string) => {
 
     // 5. Get vendor's verified Paystack recipient (সঠিকভাবে)
     const vendor = assignProject.vendor as any;
-
     const vendorRecipient = await PaystackRecipient.findOne({
       user: vendor._id,
       isDefault: true,
       isDeleted: false,
       // status: RECIPIENT_STATUS.verified,   // শুধু verified account নেবে
     }).session(session);
-
     if (!vendorRecipient || !vendorRecipient.recipientCode) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
