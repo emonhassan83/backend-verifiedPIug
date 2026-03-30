@@ -169,6 +169,13 @@ const updateAIntoDB = async (
 
   // ✅ If approved → use full approval flow
   if (status === KYC_STATUS.approved) {
+    // user updated
+    await User.findByIdAndUpdate(
+      verification.user,
+      { isKycVerified: true },
+      { new: true },
+    )
+
     return await PaystackRecipientService.approveVerification(id)
   }
 
