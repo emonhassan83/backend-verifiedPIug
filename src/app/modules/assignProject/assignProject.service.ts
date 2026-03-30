@@ -26,6 +26,7 @@ import { modelType } from '../chat/chat.interface'
 import { Withdraw } from '../withdraw/withdraw.model'
 import { WITHDRAW_AUTHORITY, WITHDRAW_METHOD, WITHDRAW_STATUS } from '../withdraw/withdraw.constant'
 import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
+import { RECIPIENT_STATUS } from '../paystackRecipient/paystackRecipient.constant'
 
 const insertIntoDB = async (userId: string, payload: TAssignProject) => {
   const session = await mongoose.startSession()
@@ -205,7 +206,7 @@ const makeAVendorPayment = async (id: string, userId: string) => {
   session.startTransaction();
 
   try {
-    // 1. Validate planner (only planner can pay vendor)
+    // 1. Validate planner
     const planner = await User.findById(userId).session(session);
     if (!planner || planner.isDeleted || planner.role !== USER_ROLE.planer) {
       throw new AppError(httpStatus.NOT_FOUND, 'Planner profile not found or invalid');
@@ -221,51 +222,48 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       throw new AppError(httpStatus.NOT_FOUND, 'Assign project not found');
     }
 
-    // 3. Corner case: Prevent duplicate payment
+    // 3. Prevent duplicate payment
     if (assignProject.paymentStatus === ASSIGNMENT_PAYMENT_STATUS.paid) {
-      throw new AppError(
-        httpStatus.CONFLICT,
-        'This vendor has already been paid for this assignment'
-      );
+      throw new AppError(httpStatus.CONFLICT, 'This vendor has already been paid for this assignment');
     }
 
     if (assignProject.status === VENDOR_ASSIGNMENT_STATUS.completed) {
-      throw new AppError(
-        httpStatus.CONFLICT,
-        'This assignment is already marked as completed'
-      );
+      throw new AppError(httpStatus.CONFLICT, 'This assignment is already marked as completed');
     }
 
     // 4. Check planner balance
     if (planner.balance < assignProject.agreedAmount) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        `Insufficient balance. You need ₦${assignProject.agreedAmount} but you have ₦${planner.balance}`
+        `Insufficient balance. Required: ₦${assignProject.agreedAmount}, Available: ₦${planner.balance}`
       );
     }
 
-    // 5. Get vendor's Paystack recipient code
-    const vendor = assignProject.vendor as any
-    const vendorRecipient =  await PaystackRecipient.findOne({
+    // 5. Get vendor's verified Paystack recipient (সঠিকভাবে)
+    const vendor = assignProject.vendor as any;
+
+    const vendorRecipient = await PaystackRecipient.findOne({
       user: vendor._id,
       isDefault: true,
       isDeleted: false,
-    }).session(session)
+      // status: RECIPIENT_STATUS.verified,   // শুধু verified account নেবে
+    }).session(session);
+
     if (!vendorRecipient || !vendorRecipient.recipientCode) {
       throw new AppError(
         httpStatus.BAD_REQUEST,
-        'Vendor has not connected their Paystack account yet'
+        'Vendor has not connected a verified Paystack account yet. Please ask the vendor to connect their bank account first.'
       );
     }
 
-    // 6. Perform secure Paystack transfer (planner → vendor)
+    // 6. Perform Paystack transfer
     const transferResponse = await axios.post(
       'https://api.paystack.co/transfer',
       {
         source: 'balance',
-        amount: assignProject.agreedAmount * 100, // kobo
-        recipient: vendorRecipient.recipientCode,
-        reason: `Payment for project ${assignProject.project?._id} - ${assignProject.serviceType?.join(', ')}`,
+        amount: assignProject.agreedAmount * 100,
+        recipient: vendorRecipient.recipientCode,        // ← সঠিক recipientCode
+        reason: `Payment for project assignment #${assignProject._id}`,
       },
       {
         headers: {
@@ -284,20 +282,11 @@ const makeAVendorPayment = async (id: string, userId: string) => {
 
     const transferData = transferResponse.data.data;
 
-    // 7. Update balances atomically
-    await User.findByIdAndUpdate(
-      planner._id,
-      { $inc: { balance: -assignProject.agreedAmount } },
-      { session }
-    );
+    // 7. Update balances
+    await User.findByIdAndUpdate(planner._id, { $inc: { balance: -assignProject.agreedAmount } }, { session });
+    await User.findByIdAndUpdate(vendor._id, { $inc: { balance: assignProject.agreedAmount } }, { session });
 
-    await User.findByIdAndUpdate(
-      vendor._id,
-      { $inc: { balance: assignProject.agreedAmount } },
-      { session }
-    );
-
-    // 8. Update AssignProject status and payment
+    // 8. Update AssignProject
     const updatedAssignProject = await AssignProject.findByIdAndUpdate(
       id,
       {
@@ -309,18 +298,18 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       { new: true, session }
     );
 
-    // 🔥 9. CREATE WITHDRAW RECORD for vendor
+    // 9. CREATE WITHDRAW RECORD for vendor (সঠিক recipientCode ব্যবহার করুন)
     const withdrawRecord = await Withdraw.create(
       [
         {
-          user: vendor._id, // Vendor who receives payment
-          order: assignProject.vendorOrder, // Project reference
-          reference: assignProject._id, // AssignProject as payment reference
+          user: vendor._id,
+          order: assignProject.vendorOrder,
+          reference: assignProject._id,
           authority: WITHDRAW_AUTHORITY.vendor,
           method: WITHDRAW_METHOD.playstack,
           amount: assignProject.agreedAmount,
           paystackTransferId: transferData.id || transferData.transfer_code,
-          recipientCode: vendor.playstackRecipientCode,
+          recipientCode: vendorRecipient.recipientCode,     // ← এখানে সংশোধন করা হয়েছে
           note: `Payment received from planner for project services: ${assignProject.serviceType?.join(', ')}`,
           proceedAt: new Date(),
           status: WITHDRAW_STATUS.completed,
@@ -329,10 +318,9 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       { session }
     );
 
-    // 10. Commit transaction
     await session.commitTransaction();
 
-    // Optional: Send notification to both parties
+    // Notification
     await vendorProjectAssignNotify(
       vendor._id,
       assignProject.vendorOrder,
@@ -350,14 +338,18 @@ const makeAVendorPayment = async (id: string, userId: string) => {
       },
       transferId: transferData.id,
     };
+
   } catch (error: any) {
     await session.abortTransaction();
+    console.error('Vendor payment error details:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
+
     throw error instanceof AppError
       ? error
-      : new AppError(
-          httpStatus.INTERNAL_SERVER_ERROR,
-          error.message || 'Vendor payment failed'
-        );
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Vendor payment failed');
   } finally {
     session.endSession();
   }
