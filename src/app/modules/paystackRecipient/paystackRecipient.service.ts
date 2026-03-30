@@ -90,7 +90,7 @@ const connectPaystackRecipient = async (
     await User.findByIdAndUpdate(
       userId,
       { playstackRecipientCode: recipientData.recipient_code },
-      { session },
+      { new: true, session },
     )
 
     if (shouldCommit) {
