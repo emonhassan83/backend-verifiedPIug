@@ -28,14 +28,14 @@ const getAllWithdraw = catchAsync(async (req, res) => {
 
 const getAllMyWithdraw = catchAsync(async (req, res) => {
   req.query['user'] = req.user._id
-  const result = await WithdrawService.getAllWithdrawsFromDB(req.query)
+  const result = await WithdrawService.getMyWithdrawsFromDB(req.query, req.user._id)
 
   sendResponse(res, {
     success: true,
     statusCode: 200,
     message: 'My Withdraw retrieved successfully!',
     meta: result.meta,
-    data: result.data.withdrawList,
+    data: result.data,
   })
 })
 

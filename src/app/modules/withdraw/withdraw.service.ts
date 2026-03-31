@@ -198,6 +198,52 @@ const getAllWithdrawsFromDB = async (query: Record<string, unknown>) => {
   }
 }
 
+const getMyWithdrawsFromDB = async (query: Record<string, unknown>, userId: string) => {
+  // 🔹 1. totalWithdraw (completed only)
+  const totalWithdrawResult = await Withdraw.aggregate([
+    {
+      $match: {
+        user: new Types.ObjectId(userId),
+        status: WITHDRAW_STATUS.completed,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalWithdraw: { $sum: '$amount' },
+      },
+    },
+  ])
+
+  const totalWithdraw = totalWithdrawResult[0]?.totalWithdraw || 0
+
+  // 🔹 2. withdraw list with query builder
+  const withdrawQuery = new QueryBuilder(
+    Withdraw.find().populate([
+      { path: 'user', select: 'name email photoUrl' },
+      { path: 'order', select: 'title' },
+    ]),
+    query,
+  )
+    .search([])
+    .filter()
+    .sort()
+    .paginate()
+    .fields()
+
+  const withdrawList = await withdrawQuery.modelQuery
+  const meta = await withdrawQuery.countTotal()
+
+  // 🔹 3. final response format
+  return {
+    meta,
+    data: {
+      totalWithdraw,
+      withdrawList,
+    },
+  }
+}
+
 // 3. For a withdraw request
 const getAWithdrawFromDB = async (id: string) => {
   const result = await Withdraw.findById(id).populate([
@@ -305,6 +351,7 @@ const updateWithdrawFromDB = async (
 export const WithdrawService = {
   createWithdrawIntoDB,
   getAllWithdrawsFromDB,
+  getMyWithdrawsFromDB,
   getAWithdrawFromDB,
   updateWithdrawFromDB,
 }
