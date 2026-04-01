@@ -122,7 +122,10 @@ const checkout = async (payload: TPayment) => {
     // Check for existing unpaid payment of same type
     let paymentData = await Payment.findOne({
       reference,
+      modelType,
+      type,
       user: userId,
+      isPaid: false,
     }).session(session)
 
     let finalAmount: number
@@ -200,6 +203,7 @@ const checkout = async (payload: TPayment) => {
           email: user?.email || '',
         },
         paymentId: paymentData!._id,
+        type: type === 'initial' ? 'initial' : 'final',
       })
 
       await session.commitTransaction()
@@ -219,7 +223,9 @@ const checkout = async (payload: TPayment) => {
 }
 
 const confirmPayment = async (query: Record<string, any>) => {
-  const { reference, paymentId } = query
+  const { reference, paymentId, type } = query
+  console.log(type);
+  
   let verifiedPaymentId: number | null = null
 
   const maxRetries = 3
@@ -230,7 +236,11 @@ const confirmPayment = async (query: Record<string, any>) => {
     try {
       session.startTransaction()
 
-      const payment = await Payment.findById(paymentId).session(session)
+      const payment = await Payment.findOne({
+        _id: paymentId,
+        type,
+        isDeleted: false,
+      }).session(session)
       if (!payment) {
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
       }
@@ -459,6 +469,8 @@ const confirmPayment = async (query: Record<string, any>) => {
             { session },
           )
         }
+
+        console.log({ updateFields })
 
         await Order.findByIdAndUpdate(payment.reference, updateFields, {
           session,

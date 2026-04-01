@@ -37,6 +37,7 @@ interface TPayload {
     name: string
     quantity: number
   }
+  type: 'initial' | 'final' | 'full' | null
   paymentId: string
   customer: {
     name: string
@@ -823,7 +824,7 @@ export const createPaystackCheckoutSession = async (payload: TPayload) => {
       product: payload.product.name,
       quantity: payload.product.quantity,
     },
-    callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${payload.paymentId}`,
+    callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${payload.paymentId}&type=${payload.type}`,
   })
 
   if (!response.status) {
