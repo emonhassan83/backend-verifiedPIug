@@ -4,8 +4,7 @@ import httpStatus from 'http-status'
 import { PaystackRecipientService } from './paystackRecipient.service';
 
 const connectAccount = catchAsync(async (req, res) => {
-  const userId = req.user._id;
-  const result = await PaystackRecipientService.connectPaystackRecipient(userId, req.body);
+  const result = await PaystackRecipientService.connectPaystackRecipient(req.user._id, req.body);
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -26,8 +25,7 @@ const getBanks = catchAsync(async (req, res) => {
 })
 
 const getMyRecipients = catchAsync(async (req, res) => {
-  const userId = req.user._id;
-  const result = await PaystackRecipientService.getUserRecipients(userId);
+  const result = await PaystackRecipientService.getUserRecipients(req.user._id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -38,10 +36,7 @@ const getMyRecipients = catchAsync(async (req, res) => {
 });
 
 const setDefault = catchAsync(async (req, res) => {
-  const userId = req.user._id;
-  const { recipientId } = req.params;
-
-  const result = await PaystackRecipientService.setDefaultRecipient(userId, recipientId);
+  const result = await PaystackRecipientService.setDefaultRecipient(req.user._id, req.params.recipientId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -52,10 +47,7 @@ const setDefault = catchAsync(async (req, res) => {
 });
 
 const deleteRecipient = catchAsync(async (req, res) => {
-  const userId = req.user._id;
-  const { recipientId } = req.params;
-
-  const result = await PaystackRecipientService.deleteRecipient(userId, recipientId);
+  const result = await PaystackRecipientService.deleteRecipient(req.user._id, req.params.recipientId);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

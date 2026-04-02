@@ -134,7 +134,7 @@ const getUserRecipients = async (userId: string) => {
   return await PaystackRecipient.find({
     user: userId,
     isDeleted: false,
-  }).sort({ isDefault: -1, createdAt: -1 })
+  }).sort({ createdAt: -1 })
 }
 
 const approveVerification = async (verificationId: string) => {
