@@ -19,7 +19,7 @@ import {
 } from './auth.interface'
 import { generateOtp } from '../../utils/generateOtp'
 import moment from 'moment'
-import { REGISTER_WITH } from '../user/user.constant'
+import { REGISTER_WITH, USER_ROLE } from '../user/user.constant'
 import { Verification } from '../verification/verification.models'
 
 const loginUser = async (payload: TLoginUser) => {
@@ -27,6 +27,13 @@ const loginUser = async (payload: TLoginUser) => {
   const user = await User.isUserExistsByEmail(payload.email)
   if (!user || user?.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, 'This user is not found !')
+  }
+
+  // if user still not kyc verified
+  if (user.role === USER_ROLE.planer || user.role === USER_ROLE.vendor) {
+    if (!user?.isKycVerified) {
+      throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
+    }
   }
 
   //* checking if the password is correct

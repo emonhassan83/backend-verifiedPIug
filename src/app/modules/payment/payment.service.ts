@@ -224,7 +224,6 @@ const checkout = async (payload: TPayment) => {
 
 const confirmPayment = async (query: Record<string, any>) => {
   const { reference, paymentId, type } = query
-  console.log(type);
   
   let verifiedPaymentId: number | null = null
 
