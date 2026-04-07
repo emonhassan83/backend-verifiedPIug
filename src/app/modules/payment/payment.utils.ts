@@ -85,7 +85,7 @@ export const createPaystackSubscriptionCheckout = async (
       product: pkg.title,
       packageId: pkg._id,
     },
-    callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${paymentId}`,
+    callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${paymentId}&type=full`,
   })
   if (!response.status) {
     throw new AppError(
@@ -823,6 +823,7 @@ export const createPaystackCheckoutSession = async (payload: TPayload) => {
       paymentId: payload.paymentId,
       product: payload.product.name,
       quantity: payload.product.quantity,
+      type: payload.type, 
     },
     callback_url: `${config.server_url}/payments/confirm-payment?paymentId=${payload.paymentId}&type=${payload.type}`,
   })

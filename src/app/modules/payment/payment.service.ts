@@ -223,42 +223,52 @@ const checkout = async (payload: TPayment) => {
 }
 
 const confirmPayment = async (query: Record<string, any>) => {
-  const { reference, paymentId, type } = query
-  
-  let verifiedPaymentId: number | null = null
+  const { reference, paymentId, type } = query;
 
-  const maxRetries = 3
-  let attempt = 0
+  let verifiedPaymentId: number | null = null;
+  const maxRetries = 3;
+  let attempt = 0;
 
   while (attempt < maxRetries) {
-    const session = await startSession()
+    const session = await startSession();
     try {
-      session.startTransaction()
+      session.startTransaction();
 
-      const payment = await Payment.findOne({
+      // ✅ FIX: Make type optional for subscription payments
+      const paymentQuery: any = {
         _id: paymentId,
-        type,
         isDeleted: false,
-      }).session(session)
-      if (!payment) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
+      };
+
+      // Only add type filter for Order payments
+      if (type && type !== 'subscription') {
+        paymentQuery.type = type;
       }
 
-      let verification
+      const payment = await Payment.findOne(paymentQuery).session(session);
+
+      console.log({ payment, type, paymentId });
+
+      if (!payment) {
+        throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!');
+      }
+
+      // Verify payment
+      let verification;
       if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
-        verification = await verifyPaystackSubscription(reference)
+        verification = await verifyPaystackSubscription(reference);
       } else {
-        verification = await verifyPaystackTransaction(reference)
+        verification = await verifyPaystackTransaction(reference);
       }
 
       if (!verification.status || verification.data.status !== 'success') {
         throw new AppError(
           httpStatus.BAD_REQUEST,
           'Payment verification failed',
-        )
+        );
       }
 
-      verifiedPaymentId = verification.data.id
+      verifiedPaymentId = verification.data.id;
 
       // Update payment
       const result = await Payment.findByIdAndUpdate(
@@ -269,17 +279,20 @@ const confirmPayment = async (query: Record<string, any>) => {
           paymentIntentId: verification.data.id,
         },
         { new: true, session },
-      )
+      );
 
+      // ========================================
+      // Handle ORDER payment
+      // ========================================
       if (payment.modelType === PAYMENT_MODEL_TYPE.Order) {
-        const order = await Order.findById(payment.reference).session(session)
+        const order = await Order.findById(payment.reference).session(session);
         if (!order) {
-          throw new AppError(httpStatus.NOT_FOUND, 'Order not found!')
+          throw new AppError(httpStatus.NOT_FOUND, 'Order not found!');
         }
 
-        let updateFields: Partial<TOrder> = {}
+        let updateFields: Partial<TOrder> = {};
 
-        // Handle initial payment
+        // ✅ FIX: Initial Payment Logic
         if (payment.type === PAYMENT_TYPE.initial) {
           updateFields = {
             ...updateFields,
@@ -290,20 +303,20 @@ const confirmPayment = async (query: Record<string, any>) => {
               status: PAYMENT_STATUS.completed,
             },
             initialPayCompleted: true,
-            pendingAmount: order.totalAmount - payment.amount,
+            // ✅ FIX: Use current pendingAmount, not totalAmount
+            pendingAmount: Math.max(0, order.pendingAmount - payment.amount),
             status: ORDER_STATUS.running,
-          }
+          };
 
-          // Check if project already exists
+          // Create/Update Project
           let project = await Project.findOne(
             { order: order._id, isDeleted: false },
             null,
             { session },
-          )
+          );
 
           if (!project) {
-            // Create new project
-            ;[project] = await Project.create(
+            [project] = await Project.create(
               [
                 {
                   author: order.sender,
@@ -316,9 +329,8 @@ const confirmPayment = async (query: Record<string, any>) => {
                 },
               ],
               { session },
-            )
+            );
           } else {
-            // Update existing project received amount
             await Project.findByIdAndUpdate(
               project._id,
               {
@@ -327,21 +339,19 @@ const confirmPayment = async (query: Record<string, any>) => {
                 updatedAt: new Date(),
               },
               { session },
-            )
+            );
           }
 
-          // ──────────────────────────────────────────────
-          // AUTO CREATE / CHECK ORDER CHAT (duplicate-proof)
-          // ──────────────────────────────────────────────
+          // Create Order Chat (duplicate-proof)
           let orderChat = await Chat.findOne({
             order: order._id,
             modelType: modelType.Order,
             reference: order._id,
             isDeleted: false,
-          }).session(session)
+          }).session(session);
 
           if (!orderChat) {
-            ;[orderChat] = await Chat.create(
+            [orderChat] = await Chat.create(
               [
                 {
                   order: order._id,
@@ -353,26 +363,25 @@ const confirmPayment = async (query: Record<string, any>) => {
                 },
               ],
               { session },
-            )
+            );
 
-            // Add participants (planner & client)
             const participants = [
               { user: order.sender, role: PARTICIPANT_ROLE.planer },
               { user: order.receiver, role: PARTICIPANT_ROLE.user },
-            ]
+            ];
 
             const existingParticipants = await Participant.find({
               chat: orderChat._id,
               isDeleted: false,
-            }).session(session)
+            }).session(session);
 
             const existingUserIds = new Set(
               existingParticipants.map((p) => p.user.toString()),
-            )
+            );
 
             const newParticipants = participants.filter(
               (p) => !existingUserIds.has(p.user.toString()),
-            )
+            );
 
             if (newParticipants.length > 0) {
               await Participant.insertMany(
@@ -383,22 +392,20 @@ const confirmPayment = async (query: Record<string, any>) => {
                   status: PARTICIPANT_STATUS.active,
                 })),
                 { session },
-              )
+              );
             }
           }
 
-          // ──────────────────────────────────────────────
-          // AUTO CREATE / CHECK GROUP CHAT (duplicate-proof)
-          // ──────────────────────────────────────────────
+          // Create Group Chat (duplicate-proof)
           let groupChat = await Chat.findOne({
             project: project._id,
             modelType: modelType.Project,
             reference: project._id,
             isDeleted: false,
-          }).session(session)
+          }).session(session);
 
           if (!groupChat) {
-            ;[groupChat] = await Chat.create(
+            [groupChat] = await Chat.create(
               [
                 {
                   project: project._id,
@@ -410,17 +417,16 @@ const confirmPayment = async (query: Record<string, any>) => {
                 },
               ],
               { session },
-            )
+            );
 
-            // Add initial participant (planner/author)
             const existingGroupParticipants = await Participant.find({
               chat: groupChat._id,
               isDeleted: false,
-            }).session(session)
+            }).session(session);
 
             const existingGroupIds = new Set(
               existingGroupParticipants.map((p) => p.user.toString()),
-            )
+            );
 
             if (!existingGroupIds.has(order.sender.toString())) {
               await Participant.create(
@@ -433,11 +439,11 @@ const confirmPayment = async (query: Record<string, any>) => {
                   },
                 ],
                 { session },
-              )
+              );
             }
           }
         }
-        // Handle final payment
+        // ✅ Handle Final Payment
         else if (payment.type === PAYMENT_TYPE.final) {
           updateFields = {
             ...updateFields,
@@ -453,31 +459,29 @@ const confirmPayment = async (query: Record<string, any>) => {
             status: ORDER_STATUS.completed,
             isCompleted: true,
             actualEndDate: new Date(),
-          }
-        }
+          };
 
-        //  Update existing project received amount on final payment
-        if (!order.isCompleted && order.status !== ORDER_STATUS.completed) {
+          // Update project to completed
           await Project.findOneAndUpdate(
             { order: order._id, isDeleted: false },
             {
               $inc: { received: payment.amount },
-              status: PROJECT_STATUS.completed, // optional: mark project completed
+              status: PROJECT_STATUS.completed,
               updatedAt: new Date(),
             },
             { session },
-          )
+          );
         }
 
-        console.log({ updateFields })
+        console.log({ updateFields });
 
         await Order.findByIdAndUpdate(payment.reference, updateFields, {
           session,
-        })
+        });
 
-        // ── NEW: Transfer authorEarning to author's balance ──
+        // Transfer to author balance
         if (payment.author) {
-          const author = await User.findById(payment.author).session(session)
+          const author = await User.findById(payment.author).session(session);
           if (author) {
             await User.findByIdAndUpdate(
               payment.author,
@@ -485,38 +489,29 @@ const confirmPayment = async (query: Record<string, any>) => {
                 $inc: { balance: payment.authorEarning },
               },
               { session },
-            )
+            );
 
             console.log(
-              `Transferred ₦${payment.authorEarning} to author ${payment.author} balance`,
-            )
-          } else {
-            console.warn(
-              `Author ${payment.author} not found for payment ${paymentId}`,
-            )
+              `Transferred ₦${payment.authorEarning} to author ${payment.author}`,
+            );
           }
         }
 
-        // ──────────────────────────────────────────────
-        // NEW: Create Withdraw Request for Author (planner) when order payment succeeds
-        // Only for authority: 'client' (planner receives money from client)
-        // ──────────────────────────────────────────────
+        // Create Withdraw Request (duplicate-proof)
         if (payment.author && order.authority === ORDER_AUTHORITY.client) {
-          // Duplicate check by payment._id
           const existingWithdraw = await Withdraw.findOne({
             user: payment.author,
             reference: payment._id,
             order: order._id,
-          }).session(session)
+          }).session(session);
 
           if (!existingWithdraw) {
-            const now = new Date()
-            const proceedAtDate = dayjs(now).add(3, 'day').toDate()
+            const proceedAtDate = dayjs().add(3, 'day').toDate();
 
             await Withdraw.create(
               [
                 {
-                  user: order.sender, // planner is the user who will receive the money
+                  user: order.sender,
                   authority: WITHDRAW_AUTHORITY.planer,
                   method: WITHDRAW_METHOD.playstack,
                   amount: payment.authorEarning,
@@ -526,26 +521,26 @@ const confirmPayment = async (query: Record<string, any>) => {
                 },
               ],
               { session },
-            )
+            );
 
             console.log(
               `Withdraw request created for payment ${payment._id} → ₦${payment.authorEarning}`,
-            )
-          } else {
-            console.log(
-              `Withdraw already exists for payment ${payment._id} - skipping`,
-            )
+            );
           }
         }
-      } else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
+      }
+      // ========================================
+      // Handle SUBSCRIPTION payment
+      // ========================================
+      else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         const subscription = await Subscription.findById(
           payment.reference,
-        ).session(session)
+        ).session(session);
+        
         if (!subscription) {
-          throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!')
+          throw new AppError(httpStatus.NOT_FOUND, 'Subscription not found!');
         }
 
-        // Update subscription
         await Subscription.findByIdAndUpdate(
           payment.reference,
           {
@@ -554,77 +549,71 @@ const confirmPayment = async (query: Record<string, any>) => {
             status: SUBSCRIPTION_STATUS.active,
           },
           { new: true, session },
-        )
+        );
 
-        // Update package popularity
         await Package.findByIdAndUpdate(
           subscription.package,
           { $inc: { popularity: 1 } },
           { session },
-        )
+        );
 
-        // Subscription Management: Extend or Replace
-        const now = new Date()
-
+        const now = new Date();
         const previousSubscription = await Subscription.findOne({
           user: subscription.user,
           _id: { $ne: subscription._id },
           paymentStatus: PAYMENT_STATUS.paid,
           status: SUBSCRIPTION_STATUS.active,
-        }).session(session)
+        }).session(session);
 
         if (previousSubscription) {
           if (
             previousSubscription.expiredAt &&
             previousSubscription.expiredAt > now
           ) {
-            // Extend existing subscription
             if (subscription.expiredAt) {
               previousSubscription.expiredAt = new Date(
                 previousSubscription.expiredAt.getTime() +
                   (subscription.expiredAt.getTime() - now.getTime()),
-              )
+              );
             }
           } else {
-            // Replace expiry
             if (subscription.expiredAt) {
-              previousSubscription.expiredAt = subscription.expiredAt
+              previousSubscription.expiredAt = subscription.expiredAt;
             }
-            previousSubscription.isExpired = false
+            previousSubscription.isExpired = false;
           }
 
-          await previousSubscription.save({ session })
+          await previousSubscription.save({ session });
 
-          // Point payment to previous subscription and delete new one
           await Payment.findByIdAndUpdate(
             paymentId,
             {
               subscription: previousSubscription._id,
             },
             { session },
-          )
+          );
 
-          await Subscription.findByIdAndDelete(subscription._id, { session })
+          await Subscription.findByIdAndDelete(subscription._id, { session });
         }
 
-        // Update user's package expiry
-        const finalExpiryDate = subscription.expiredAt || new Date()
+        const finalExpiryDate = subscription.expiredAt || new Date();
         await User.findByIdAndUpdate(
           payment.user,
           { packageExpiry: finalExpiryDate },
           { session },
-        )
+        );
       }
 
-      // Send notifications (you can call your notify functions here)
-      await paymentNotifyToUser('SUCCESS', payment)
-      await paymentNotifyToAdmin('SUCCESS', payment)
+      // Send notifications
+      await paymentNotifyToUser('SUCCESS', payment);
+      await paymentNotifyToAdmin('SUCCESS', payment);
 
-      await session.commitTransaction()
-      return result
+      await session.commitTransaction();
+      return result;
     } catch (error: any) {
-      await session.abortTransaction()
-      attempt++
+      await session.abortTransaction();
+      attempt++;
+      
       if (attempt === maxRetries) {
         if (verifiedPaymentId) {
           try {
@@ -632,22 +621,23 @@ const confirmPayment = async (query: Record<string, any>) => {
               verifiedPaymentId,
               paymentId.amount,
               'Refund Request',
-            )
+            );
           } catch (refundError: any) {
-            console.error('Refund failed:', refundError.message)
+            console.error('Refund failed:', refundError.message);
           }
         }
-        throw new AppError(httpStatus.BAD_GATEWAY, error.message)
+        throw new AppError(httpStatus.BAD_GATEWAY, error.message);
       }
+      
       console.warn(
         `Retrying transaction (attempt ${attempt + 1}/${maxRetries})`,
-      )
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     } finally {
-      session.endSession()
+      session.endSession();
     }
   }
-}
+};
 
 const handleWebhook = async (req: any) => {
   const result = await handlePaystackWebhook(req)
