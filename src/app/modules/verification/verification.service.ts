@@ -6,9 +6,9 @@ import AppError from '../../errors/AppError'
 import { uploadToS3 } from '../../utils/s3'
 import { User } from '../user/user.model'
 import { KYC_STATUS, TKycStatus } from './verification.constants'
-import { sendKycStatusNotification } from './verification.utils'
+import { sendKycRejectionEmail, sendKycStatusNotification, sendKycSuccessEmail } from './verification.utils'
 import { PaystackRecipientService } from '../paystackRecipient/paystackRecipient.service'
-import { startSession } from 'mongoose'
+import mongoose, { startSession } from 'mongoose'
 
 // Create a new Verification
 const insertIntoDB = async (
@@ -130,7 +130,7 @@ const insertIntoDB = async (
 // Get all Verification
 const getAllIntoDB = async (query: Record<string, any>) => {
   const verificationModel = new QueryBuilder(Verification.find(), query)
-    .search([''])
+    .search(['personalInfo.name'])
     .filter()
     .paginate()
     .sort()
@@ -160,47 +160,86 @@ const updateAIntoDB = async (
   id: string,
   payload: { status: TKycStatus; reason?: string },
 ) => {
-  const { status, reason } = payload
+  const { status, reason } = payload;
 
-  const verification = await Verification.findById(id)
+  const verification = await Verification.findById(id);
   if (!verification) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Verification not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Verification not found!');
   }
 
-  // ✅ If approved → use full approval flow
-  if (status === KYC_STATUS.approved) {
-    // user updated
-    await User.findByIdAndUpdate(
-      verification.user,
-      { isKycVerified: true },
-      { new: true },
-    )
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    return await PaystackRecipientService.approveVerification(id)
+  try {
+    let updatedVerification;
+
+    if (status === KYC_STATUS.approved) {
+      // 1. Update User KYC Status
+      await User.findByIdAndUpdate(
+        verification.user,
+        { isKycVerified: true },
+        { new: true, session }
+      );
+
+      // 2. Approve Verification
+      updatedVerification = await PaystackRecipientService.approveVerification(id);
+
+      // 3. Send Success Email
+      const user = await User.findById(verification.user).session(session);
+      if (user && user.email) {
+        await sendKycSuccessEmail(user);
+      }
+
+    } else if (status === KYC_STATUS.denied) {
+      // Denied হলে reason mandatory
+      if (!reason) {
+        throw new AppError(httpStatus.BAD_REQUEST, 'Rejection reason is required when denying KYC');
+      }
+
+      // Update Verification Status
+      updatedVerification = await Verification.findByIdAndUpdate(
+        id,
+        { 
+          status: KYC_STATUS.denied,
+          reason: reason 
+        },
+        { new: true, session }
+      );
+
+      // Send Rejection Email with Reason
+      const user = await User.findById(verification.user).session(session);
+      if (user && user.email) {
+        await sendKycRejectionEmail(user, reason);
+      }
+
+    } else {
+      // Other statuses (pending, etc.)
+      updatedVerification = await Verification.findByIdAndUpdate(
+        id,
+        { status },
+        { new: true, session }
+      );
+    }
+
+    // Common Notification (FCM)
+    const userForNotification = await User.findById(verification.user).session(session);
+    if (userForNotification && userForNotification.fcmToken) {
+      await sendKycStatusNotification(updatedVerification as any, userForNotification, 'profile', reason);
+    }
+
+    await session.commitTransaction();
+
+    return updatedVerification;
+
+  } catch (error: any) {
+    await session.abortTransaction();
+    throw error instanceof AppError 
+      ? error 
+      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Failed to update KYC status');
+  } finally {
+    session.endSession();
   }
-
-  // ❌ For other statuses (rejected / pending etc.)
-  const result = await Verification.findByIdAndUpdate(
-    id,
-    { status },
-    { new: true },
-  )
-
-  if (!result) {
-    throw new AppError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      'Verification record not updated!',
-    )
-  }
-
-  // Notification
-  const user = await User.findById(verification.user)
-  if (user && user?.fcmToken) {
-    await sendKycStatusNotification(result, user, 'profile', reason)
-  }
-
-  return result
-}
+};
 
 // Delete Verification
 const deleteAIntoDB = async (id: string) => {
