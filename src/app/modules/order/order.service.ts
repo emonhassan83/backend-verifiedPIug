@@ -33,10 +33,18 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
 
   // 1. Validate sender (current logged-in user)
   const sender = await User.findById(userId).select('role status isDeleted')
-  if (!sender || sender.isDeleted) {
+  if (!sender || sender?.isDeleted) {
     throw new AppError(
       httpStatus.NOT_FOUND,
       'Your profile not found or deleted',
+    )
+  }
+
+  // 1.5: if sender still not kyc verified
+  if (!sender?.isKycVerified) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Your account is not kyc verified. Please complete kyc verification to create an order.',
     )
   }
 
@@ -145,7 +153,7 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
   const baseQuery = {
     $or: [{ sender: userId }, { receiver: userId }],
     isDeleted: false,
-  };
+  }
 
   const OrderModel = new QueryBuilder(
     Order.find(baseQuery).populate([
@@ -158,40 +166,40 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
     .filter()
     .paginate()
     .sort()
-    .fields();
+    .fields()
 
   // Raw orders data আনা
-  let data = await OrderModel.modelQuery.lean();
+  let data = await OrderModel.modelQuery.lean()
 
   // Step 1: সব order-এর _id সংগ্রহ করা
-  const orderIds = data.map((order: any) => order._id);
+  const orderIds = data.map((order: any) => order._id)
 
   // Step 2: একসাথে সব order-এর জন্য AssignProject চেক করা (performance-এর জন্য bulk query)
   const assignedOrders = await AssignProject.find(
     {
-      vendorOrder: { $in: orderIds }
+      vendorOrder: { $in: orderIds },
     },
-    { vendorOrder: 1 }
-  ).lean();
+    { vendorOrder: 1 },
+  ).lean()
 
   // Step 3: assigned order-গুলোর set তৈরি করা (দ্রুত lookup-এর জন্য)
   const assignedOrderSet = new Set(
-    assignedOrders.map((assign: any) => assign.vendorOrder.toString())
-  );
+    assignedOrders.map((assign: any) => assign.vendorOrder.toString()),
+  )
 
   // Step 4: প্রতিটি order-এ isAssigned ফিল্ড যোগ করা
   data = data.map((order: any) => ({
     ...order,
     isAssigned: assignedOrderSet.has(order._id.toString()),
-  }));
+  }))
 
-  const meta = await OrderModel.countTotal();
+  const meta = await OrderModel.countTotal()
 
   return {
     data,
     meta,
-  };
-};
+  }
+}
 
 // Get Order by ID
 const getAIntoDB = async (id: string) => {

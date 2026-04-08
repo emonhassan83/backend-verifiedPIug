@@ -42,6 +42,14 @@ const createSubscription = async (payload: TSubscriptions) => {
       throw new AppError(httpStatus.NOT_FOUND, 'User not found!')
     }
 
+    // Check if the user is KYC verified
+    if (!user?.isKycVerified) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
+      )
+    }
+
     // Find the package in the database
     const packages = await Package.findById(payload.package).session(session)
     if (!packages || packages.isDeleted) {

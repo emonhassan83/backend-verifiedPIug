@@ -30,11 +30,11 @@ const loginUser = async (payload: TLoginUser) => {
   }
 
   // if user still not kyc verified
-  if (user.role === USER_ROLE.planer || user.role === USER_ROLE.vendor) {
-    if (!user?.isKycVerified) {
-      throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
-    }
-  }
+  // if (user.role === USER_ROLE.planer || user.role === USER_ROLE.vendor) {
+  //   if (!user?.isKycVerified) {
+  //     throw new AppError(httpStatus.FORBIDDEN, 'User account is not verified')
+  //   }
+  // }
 
   //* checking if the password is correct
   if (!(await User.isPasswordMatched(payload?.password, user?.password)))

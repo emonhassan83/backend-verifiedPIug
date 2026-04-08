@@ -36,6 +36,14 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
+  // Check if the user is KYC verified
+    if (!user?.isKycVerified) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
+      )
+    }
+
   // 2. Check subscription permission & get current level
   const { level } = await checkSubscriptionPermission(
     userId,

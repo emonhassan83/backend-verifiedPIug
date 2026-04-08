@@ -35,6 +35,14 @@ const connectPaystackRecipient = async (
       throw new AppError(httpStatus.NOT_FOUND, 'User not found')
     }
 
+    // Check if the user is KYC verified
+    if (!user?.isKycVerified) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
+      )
+    }
+
     // 2. Check if recipient already exists
     const existingRecipient = await PaystackRecipient.findOne({
       user: userId,
