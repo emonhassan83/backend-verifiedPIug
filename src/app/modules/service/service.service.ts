@@ -13,6 +13,8 @@ import {
 } from './service.constants'
 import {
   attachFavoriteFlag,
+  sendServiceActivatedEmail,
+  sendServiceRejectedEmail,
   sendServiceStatusNotifyToAuthor,
 } from './service.utils'
 import { Favorite } from '../favorite/favorite.model'
@@ -37,12 +39,12 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
   }
 
   // Check if the user is KYC verified
-    if (!user?.isKycVerified) {
-      throw new AppError(
-        httpStatus.FORBIDDEN,
-        'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
-      )
-    }
+  if (!user?.isKycVerified) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
+    )
+  }
 
   // 2. Check subscription permission & get current level
   const { level } = await checkSubscriptionPermission(
@@ -340,6 +342,7 @@ const changeStatusFromDB = async (
 
   const oldStatus = service.status
 
+  // Update service status
   const result = await Service.findByIdAndUpdate(
     service._id,
     { status },
@@ -353,7 +356,7 @@ const changeStatusFromDB = async (
     )
   }
 
-  // 📊 Category listing logic (only when activated)
+  // Category listing count increase (only when activated)
   if (oldStatus !== status && status === SERVICE_STATUS.active) {
     await Category.findByIdAndUpdate(
       service.category,
@@ -362,11 +365,22 @@ const changeStatusFromDB = async (
     )
   }
 
-  // 🔔 Send notification only if status changed
+  // ====================== EMAIL NOTIFICATION ======================
+  const author = service.author as any
+
+  if (author && author.email) {
+    if (status === SERVICE_STATUS.active) {
+      await sendServiceActivatedEmail(author, result)
+    } else if (status === SERVICE_STATUS.denied) {
+      await sendServiceRejectedEmail(author, result, reason)
+    }
+  }
+
+  // ====================== FCM NOTIFICATION ======================
   await sendServiceStatusNotifyToAuthor(
     status,
-    service.author as any,
-    service,
+    author,
+    result,
     'service',
     reason,
   )
@@ -375,112 +389,125 @@ const changeStatusFromDB = async (
 }
 
 const changeFeaturedService = async (id: string, userId: string) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const session = await mongoose.startSession()
+  session.startTransaction()
 
   try {
     // 1. Find the service
     const service = await Service.findById(id)
       .populate('author')
-      .session(session);
+      .session(session)
 
     if (!service || service.isDeleted) {
       throw new AppError(
         httpStatus.NOT_FOUND,
-        'Service not found or has been deleted'
-      );
+        'Service not found or has been deleted',
+      )
     }
 
     // 2. Authorization: only the author can toggle
     if (service.author._id.toString() !== userId) {
       throw new AppError(
         httpStatus.FORBIDDEN,
-        'You are not authorized to change featured status of this service'
-      );
+        'You are not authorized to change featured status of this service',
+      )
     }
 
     // 3. Get user's current subscription level
-    const { level } = await checkSubscriptionPermission(userId, 'featuredPlacement');
+    const { level } = await checkSubscriptionPermission(
+      userId,
+      'featuredPlacement',
+    )
 
     // 4. Define max allowed featured services per month
-    let maxAllowed = 0;
+    let maxAllowed = 0
     if (level === 'pro') {
-      maxAllowed = 1;
+      maxAllowed = 1
     } else if (level === 'elite') {
-      maxAllowed = 3;
+      maxAllowed = 3
     } // starter/free = 0
 
     // 5. Calculate how many services this author has featured in the current month
     // Using featuredAt field (only counts when featuredAt is set)
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+    )
 
     const featuredThisMonthCount = await Service.countDocuments({
       author: userId,
       isFeatured: true,
       featuredAt: { $gte: startOfMonth, $lte: endOfMonth },
       isDeleted: false,
-    }).session(session);
+    }).session(session)
 
     // 6. If turning ON featured → check limit
-    const newFeaturedStatus = !service.isFeatured;
+    const newFeaturedStatus = !service.isFeatured
 
     if (newFeaturedStatus) {
       if (featuredThisMonthCount >= maxAllowed) {
         throw new AppError(
           httpStatus.FORBIDDEN,
           `You have reached your monthly featured listing limit (${maxAllowed}) for the ${level} plan. ` +
-            `Please upgrade to a higher plan or wait until next month.`
-        );
+            `Please upgrade to a higher plan or wait until next month.`,
+        )
       }
 
       // Set featuredAt when turning ON
       await Service.findByIdAndUpdate(
         service._id,
-        { 
+        {
           isFeatured: true,
-          featuredAt: now 
+          featuredAt: now,
         },
-        { new: true, runValidators: true, session }
-      );
+        { new: true, runValidators: true, session },
+      )
     } else {
       // Clear featuredAt when turning OFF
       await Service.findByIdAndUpdate(
         service._id,
-        { 
+        {
           isFeatured: false,
-          featuredAt: null 
+          featuredAt: null,
         },
-        { new: true, runValidators: true, session }
-      );
+        { new: true, runValidators: true, session },
+      )
     }
 
     // 7. Fetch updated service
     const updatedService = await Service.findById(id)
       .populate('author category')
-      .session(session);
+      .session(session)
 
     // 8. Dynamic success message
     const actionMessage = newFeaturedStatus
       ? `Service successfully marked as Featured (${featuredThisMonthCount + 1}/${maxAllowed} this month)`
-      : 'Service removed from Featured list';
+      : 'Service removed from Featured list'
 
-    await session.commitTransaction();
+    await session.commitTransaction()
 
     return {
       message: actionMessage,
-      data: updatedService
-    };
+      data: updatedService,
+    }
   } catch (error) {
-    await session.abortTransaction();
-    throw error instanceof AppError 
-      ? error 
-      : new AppError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to toggle featured status');
+    await session.abortTransaction()
+    throw error instanceof AppError
+      ? error
+      : new AppError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Failed to toggle featured status',
+        )
   } finally {
-    session.endSession();
+    session.endSession()
   }
-};
+}
 
 // Delete Service
 const deleteAIntoDB = async (id: string) => {

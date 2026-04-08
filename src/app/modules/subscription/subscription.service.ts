@@ -107,7 +107,11 @@ const createSubscription = async (payload: TSubscriptions) => {
 
 const getAllSubscription = async (query: Record<string, any>) => {
   const subscriptionsModel = new QueryBuilder(
-    Subscription.find({ isDeleted: false }).populate([
+    Subscription.find({
+      isDeleted: false,
+      paymentStatus: PAYMENT_STATUS.paid,
+      status: { $ne: SUBSCRIPTION_STATUS.pending },
+    }).populate([
       {
         path: 'package',
         select: '',
@@ -176,7 +180,12 @@ const updateSubscription = async (
   // notify user about subscription status change
   const user = await User.findById(sub.user).select('fcmToken')
   if (user && user?.fcmToken) {
-    await subscriptionNotifyToUser(status as 'active' | 'suspend', sub, user, note)
+    await subscriptionNotifyToUser(
+      status as 'active' | 'suspend',
+      sub,
+      user,
+      note,
+    )
   }
 
   return result

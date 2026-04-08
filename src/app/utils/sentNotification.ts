@@ -6,25 +6,23 @@ import { Notification } from '../modules/notification/notification.model';
 import { User } from '../modules/user/user.model';
 import config from '../config';
 
-
 const firebaseConfig = {
   type: "service_account",
-  project_id: process.env.FIREBASE_PROJECT_ID,
-  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-  client_email: process.env.FIREBASE_CLIENT_EMAIL,
-  client_id: process.env.FIREBASE_CLIENT_ID,
+  project_id: config.firebase.project_id,
+  private_key_id: config.firebase.private_key_id,
+  private_key: config.firebase.private_key,
+  client_email: config.firebase.client_email,
+  client_id: config.firebase.client_id,
   auth_uri: "https://accounts.google.com/o/oauth2/auth",
   token_uri: "https://oauth2.googleapis.com/token",
   auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url: process.env.FIREBASE_CLIENT_CERT_URL,
+  client_x509_cert_url: config.firebase.client_x509_cert_url,
 };
 
 admin.initializeApp({
   credential: admin.credential.cert(firebaseConfig as admin.ServiceAccount),
 });
 
- 
 export const sendNotification = async (
   fcmToken: string[],
   payload: TNotification,
