@@ -32,7 +32,7 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
   } = payload
 
   // 1. Validate sender (current logged-in user)
-  const sender = await User.findById(userId).select('role status isDeleted')
+  const sender = await User.findById(userId).select('role isKycVerified status isDeleted')
   if (!sender || sender?.isDeleted) {
     throw new AppError(
       httpStatus.NOT_FOUND,
