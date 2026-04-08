@@ -17,6 +17,7 @@ export default {
   jwt_access_expires_in: process.env.JWT_ACCESS_EXPIRE_IN,
   jwt_refresh_expires_in: process.env.JWT_REFRESH_EXPIRE_IN,
   reset_pass_link: process.env.RESET_PASS_LINK,
+  firebase_config: process.env.FIREBASE_CONFIG,
   emailSender: {
     email: process.env.EMAIL,
     app_pass: process.env.APP_PASS,
