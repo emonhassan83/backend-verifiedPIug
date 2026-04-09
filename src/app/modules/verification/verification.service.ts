@@ -171,49 +171,34 @@ const updateAIntoDB = async (
   session.startTransaction();
 
   try {
-    let updatedVerification;
+    let updatedVerification: any;
 
     if (status === KYC_STATUS.approved) {
-      // 1. Update User KYC Status
+      // First, update User KYC status
       await User.findByIdAndUpdate(
         verification.user,
         { isKycVerified: true },
-        { new: true, session }
+        { session }
       );
 
-      // 2. Approve Verification
-      updatedVerification = await PaystackRecipientService.approveVerification(id);
-
-      // 3. Send Success Email
-      const user = await User.findById(verification.user).session(session);
-      if (user && user.email) {
-        await sendKycSuccessEmail(user);
-      }
+      // Then call approveVerification — but pass session if possible
+      updatedVerification = await PaystackRecipientService.approveVerification(id, session);
 
     } else if (status === KYC_STATUS.denied) {
-      // Denied হলে reason mandatory
       if (!reason) {
         throw new AppError(httpStatus.BAD_REQUEST, 'Rejection reason is required when denying KYC');
       }
 
-      // Update Verification Status
       updatedVerification = await Verification.findByIdAndUpdate(
         id,
         { 
           status: KYC_STATUS.denied,
-          reason: reason 
+          reason 
         },
         { new: true, session }
       );
 
-      // Send Rejection Email with Reason
-      const user = await User.findById(verification.user).session(session);
-      if (user && user.email) {
-        await sendKycRejectionEmail(user, reason);
-      }
-
     } else {
-      // Other statuses (pending, etc.)
       updatedVerification = await Verification.findByIdAndUpdate(
         id,
         { status },
@@ -221,18 +206,29 @@ const updateAIntoDB = async (
       );
     }
 
-    // Common Notification (FCM)
+    // Common FCM Notification
     const userForNotification = await User.findById(verification.user).session(session);
-    if (userForNotification && userForNotification.fcmToken) {
-      await sendKycStatusNotification(updatedVerification as any, userForNotification, 'profile', reason);
+    if (userForNotification?.fcmToken) {
+      await sendKycStatusNotification(updatedVerification, userForNotification, 'profile', reason);
     }
 
     await session.commitTransaction();
+
+    // Email sending — transaction এর বাইরে (কারণ email send করা transaction-এর অংশ নয়)
+    const user = await User.findById(verification.user);
+    if (user?.email) {
+      if (status === KYC_STATUS.approved) {
+        await sendKycSuccessEmail(user);
+      } else if (status === KYC_STATUS.denied) {
+        await sendKycRejectionEmail(user, reason || 'No reason provided');
+      }
+    }
 
     return updatedVerification;
 
   } catch (error: any) {
     await session.abortTransaction();
+    console.error('KYC Update Error:', error);
     throw error instanceof AppError 
       ? error 
       : new AppError(httpStatus.INTERNAL_SERVER_ERROR, error.message || 'Failed to update KYC status');

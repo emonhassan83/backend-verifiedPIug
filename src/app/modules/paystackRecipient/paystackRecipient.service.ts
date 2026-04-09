@@ -3,7 +3,7 @@ import { User } from '../user/user.model'
 import { createPaystackRecipient } from '../../utils/paystack.utils' // আগের ফাংশন
 import AppError from '../../errors/AppError'
 import httpStatus from 'http-status'
-import { startSession } from 'mongoose'
+import mongoose, { startSession } from 'mongoose'
 import { RECIPIENT_STATUS } from './paystackRecipient.constant'
 import axios from 'axios'
 import config from '../../config'
@@ -145,11 +145,12 @@ const getUserRecipients = async (userId: string) => {
   }).sort({ createdAt: -1 })
 }
 
-const approveVerification = async (verificationId: string) => {
-  const session = await startSession()
-
+const approveVerification = async (
+  verificationId: string,
+  session: mongoose.ClientSession, // ← session প্যারামিটার নিন
+) => {
   try {
-    await session.startTransaction()
+    // No new transaction here! Use the passed session
 
     // 1. Get verification
     const verification = await Verification.findById(verificationId)
@@ -174,28 +175,26 @@ const approveVerification = async (verificationId: string) => {
     await User.findByIdAndUpdate(
       user._id,
       {
-        isVerified: true,
+        isKycVerified: true, // Note: isKycVerified (আপনার মডেল অনুযায়ী)
         verifiedAt: new Date(),
       },
       { session },
     )
 
-    // 4. Check and activate Paystack recipient if exists
+    // 4. Update or activate Paystack recipient if exists
     const paystackRecipient = await PaystackRecipient.findOne({
       user: user._id,
       accountNumber: verification.bankInfo.accountNumber,
     }).session(session)
 
-    if (
-      paystackRecipient &&
-      paystackRecipient.status === RECIPIENT_STATUS.pending
-    ) {
-      paystackRecipient.status = RECIPIENT_STATUS.verified
-      await paystackRecipient.save({ session })
+    if (paystackRecipient) {
+      if (paystackRecipient.status === RECIPIENT_STATUS.pending) {
+        paystackRecipient.status = RECIPIENT_STATUS.verified
+        await paystackRecipient.save({ session })
+      }
     }
-
-    // 5. If Paystack recipient doesn't exist, create it now
-    if (!paystackRecipient) {
+    // 5. If no recipient exists, create one
+    else {
       try {
         await PaystackRecipientService.connectPaystackRecipient(
           user._id,
@@ -204,64 +203,34 @@ const approveVerification = async (verificationId: string) => {
             bankCode: verification.bankInfo.bankCode,
             accountName: verification.bankInfo.accountName,
           },
-          session,
+          session, // ← session পাস করুন
         )
-      } catch (error) {
+      } catch (paystackError) {
         console.error(
-          'Failed to create Paystack recipient during approval:',
-          error,
+          'Failed to create Paystack recipient during KYC approval:',
+          paystackError,
         )
-        // Don't fail approval if Paystack fails
+        // Don't fail the whole approval for this
       }
     }
 
-    await session.commitTransaction()
-
-    // 6. Send notifications
-    try {
-      await sendKycStatusNotification(
-        verification._id as any,
-        verification.user as any,
-        'profile',
-      )
-
-      if (user.email) {
-        await emailSender(
-          user.email,
-          'KYC Verification Approved',
-          `
-            <h2>🎉 KYC Verification Approved!</h2>
-            <p>Dear ${user.name},</p>
-            <p>Great news! Your KYC verification has been approved.</p>
-            <p><strong>You can now:</strong></p>
-            <ul>
-              <li>✅ Receive payments</li>
-              <li>✅ Withdraw funds</li>
-              <li>✅ Access all platform features</li>
-            </ul>
-            <p>Your bank account has been successfully connected and verified.</p>
-            <p>Thank you for completing the verification process!</p>
-          `,
-        )
-      }
-    } catch (notificationError) {
-      console.error('Notification failed:', notificationError)
-    }
+    // 6. Notifications & Email (transaction এর বাইরে রাখা ভালো)
+    // কিন্তু এখানে transaction চলছে, তাই শুধু logging করুন
+    console.log(`KYC approved for user ${user._id}`)
 
     return {
+      success: true,
       verification,
       message: 'Verification approved successfully',
     }
   } catch (error: any) {
-    await session.abortTransaction()
+    console.error('Approve Verification Error:', error)
     throw error instanceof AppError
       ? error
       : new AppError(
           httpStatus.INTERNAL_SERVER_ERROR,
           error.message || 'Verification approval failed',
         )
-  } finally {
-    session.endSession()
   }
 }
 
