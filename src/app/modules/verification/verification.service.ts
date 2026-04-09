@@ -129,7 +129,9 @@ const insertIntoDB = async (
 
 // Get all Verification
 const getAllIntoDB = async (query: Record<string, any>) => {
-  const verificationModel = new QueryBuilder(Verification.find(), query)
+  const verificationModel = new QueryBuilder(Verification.find().populate([
+    { path: 'user', select: 'name email' },
+  ]), query)
     .search(['personalInfo.name'])
     .filter()
     .paginate()
