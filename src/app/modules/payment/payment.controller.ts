@@ -24,7 +24,7 @@ const confirmPayment = catchAsync(async (req, res) => {
   sendResponse(res, {
     success: true,
     statusCode: httpStatus.OK,
-    message: result?.modelType === 'Subscription' ? 'Subscription confirmed successfully' : 'Payment confirmed successfully',
+    message: 'Payment confirmed successfully',
     data: result,
   })
 })
