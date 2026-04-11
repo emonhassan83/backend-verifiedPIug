@@ -233,48 +233,46 @@ const confirmPayment = async (query: Record<string, any>) => {
 
   while (attempt < maxRetries) {
     const session = await startSession()
+
     try {
       session.startTransaction()
 
-      // ✅ FIX: Make type optional for subscription payments
       const paymentQuery: any = {
         _id: paymentId,
         isDeleted: false,
       }
 
-      // Only add type filter for Order payments
       if (type && type !== 'subscription') {
         paymentQuery.type = type
       }
 
-      const payment = await Payment.findOne(paymentQuery).session(session)
+      const existingPayment = await Payment.findOne(paymentQuery).session(session)
 
-      console.log({ payment, type, paymentId })
-
-      if (!payment) {
+      if (!existingPayment) {
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
       }
 
-      // Verify payment
+      // ✅ VERIFY PAYMENT FIRST
       let verification
-      if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
+      if (existingPayment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         verification = await verifyPaystackSubscription(reference)
       } else {
         verification = await verifyPaystackTransaction(reference)
       }
 
       if (!verification.status || verification.data.status !== 'success') {
-        throw new AppError(
-          httpStatus.BAD_REQUEST,
-          'Payment verification failed',
-        )
+        throw new AppError(httpStatus.BAD_REQUEST, 'Payment verification failed')
       }
 
       verifiedPaymentId = verification.data.id
 
-      // Update payment
-      const result = await Payment.findByIdAndUpdate(
-        paymentId,
+      // ✅ 🔥 CRITICAL FIX (IDEMPOTENT)
+      const payment = await Payment.findOneAndUpdate(
+        {
+          _id: paymentId,
+          isDeleted: false,
+          isPaid: false, // 🔥 only unpaid will pass
+        },
         {
           isPaid: true,
           status: PAYMENT_STATUS.paid,
@@ -283,8 +281,17 @@ const confirmPayment = async (query: Record<string, any>) => {
         { new: true, session },
       )
 
+      // ✅ Already processed আগে → stop everything
+      if (!payment) {
+        await session.commitTransaction()
+        return {
+          success: true,
+          message: 'Payment already confirmed',
+        }
+      }
+
       // ========================================
-      // Handle ORDER payment
+      // ORDER PAYMENT
       // ========================================
       if (payment.modelType === PAYMENT_MODEL_TYPE.Order) {
         const order = await Order.findById(payment.reference).session(session)
@@ -294,10 +301,9 @@ const confirmPayment = async (query: Record<string, any>) => {
 
         let updateFields: Partial<TOrder> = {}
 
-        // ✅ FIX: Initial Payment Logic
+        // 🔹 INITIAL PAYMENT
         if (payment.type === PAYMENT_TYPE.initial) {
           updateFields = {
-            ...updateFields,
             initialPayment: {
               amountPaid: payment.amount,
               paidAt: new Date(),
@@ -305,12 +311,10 @@ const confirmPayment = async (query: Record<string, any>) => {
               status: PAYMENT_STATUS.completed,
             },
             initialPayCompleted: true,
-            // ✅ FIX: Use current pendingAmount, not totalAmount
             pendingAmount: Math.max(0, order.pendingAmount - payment.amount),
             status: ORDER_STATUS.running,
           }
 
-          // Create/Update Project
           let project = await Project.findOne(
             { order: order._id, isDeleted: false },
             null,
@@ -336,119 +340,18 @@ const confirmPayment = async (query: Record<string, any>) => {
             await Project.findByIdAndUpdate(
               project._id,
               {
-                $inc: { received: payment.amount },
+                $inc: { received: payment.amount }, // ✅ safe now
                 status: PROJECT_STATUS.ongoing,
                 updatedAt: new Date(),
               },
               { session },
             )
           }
-
-          // Create Order Chat (duplicate-proof)
-          let orderChat = await Chat.findOne({
-            order: order._id,
-            modelType: modelType.Order,
-            reference: order._id,
-            isDeleted: false,
-          }).session(session)
-
-          if (!orderChat) {
-            ;[orderChat] = await Chat.create(
-              [
-                {
-                  order: order._id,
-                  modelType: modelType.Order,
-                  reference: order._id,
-                  name: `Order Chat - ${order.title}`,
-                  status: CHAT_STATUS.active,
-                  isDeleted: false,
-                },
-              ],
-              { session },
-            )
-
-            const participants = [
-              { user: order.sender, role: PARTICIPANT_ROLE.planer },
-              { user: order.receiver, role: PARTICIPANT_ROLE.user },
-            ]
-
-            const existingParticipants = await Participant.find({
-              chat: orderChat._id,
-              isDeleted: false,
-            }).session(session)
-
-            const existingUserIds = new Set(
-              existingParticipants.map((p) => p.user.toString()),
-            )
-
-            const newParticipants = participants.filter(
-              (p) => !existingUserIds.has(p.user.toString()),
-            )
-
-            if (newParticipants.length > 0) {
-              await Participant.insertMany(
-                newParticipants.map((p) => ({
-                  chat: orderChat!._id,
-                  user: p.user,
-                  role: p.role,
-                  status: PARTICIPANT_STATUS.active,
-                })),
-                { session },
-              )
-            }
-          }
-
-          // Create Group Chat (duplicate-proof)
-          let groupChat = await Chat.findOne({
-            project: project._id,
-            modelType: modelType.Project,
-            reference: project._id,
-            isDeleted: false,
-          }).session(session)
-
-          if (!groupChat) {
-            ;[groupChat] = await Chat.create(
-              [
-                {
-                  project: project._id,
-                  modelType: modelType.Project,
-                  reference: project._id,
-                  name: `Project Group - ${order.title}`,
-                  status: CHAT_STATUS.active,
-                  isDeleted: false,
-                },
-              ],
-              { session },
-            )
-
-            const existingGroupParticipants = await Participant.find({
-              chat: groupChat._id,
-              isDeleted: false,
-            }).session(session)
-
-            const existingGroupIds = new Set(
-              existingGroupParticipants.map((p) => p.user.toString()),
-            )
-
-            if (!existingGroupIds.has(order.sender.toString())) {
-              await Participant.create(
-                [
-                  {
-                    chat: groupChat._id,
-                    user: order.sender,
-                    role: PARTICIPANT_ROLE.planer,
-                    status: PARTICIPANT_STATUS.active,
-                  },
-                ],
-                { session },
-              )
-            }
-          }
         }
-        // ✅ Handle Final Payment
+
+        // 🔹 FINAL PAYMENT
         else if (payment.type === PAYMENT_TYPE.final) {
           updateFields = {
-            ...updateFields,
             finalPayment: {
               amountPaid: payment.amount,
               paidAt: new Date(),
@@ -463,11 +366,10 @@ const confirmPayment = async (query: Record<string, any>) => {
             actualEndDate: new Date(),
           }
 
-          // Update project to completed
           await Project.findOneAndUpdate(
             { order: order._id, isDeleted: false },
             {
-              $inc: { received: payment.amount },
+              $inc: { received: payment.amount }, // ✅ safe
               status: PROJECT_STATUS.completed,
               updatedAt: new Date(),
             },
@@ -475,31 +377,22 @@ const confirmPayment = async (query: Record<string, any>) => {
           )
         }
 
-        console.log({ updateFields })
-
         await Order.findByIdAndUpdate(payment.reference, updateFields, {
           session,
         })
 
-        // Transfer to author balance
+        // 🔹 AUTHOR BALANCE
         if (payment.author) {
-          const author = await User.findById(payment.author).session(session)
-          if (author) {
-            await User.findByIdAndUpdate(
-              payment.author,
-              {
-                $inc: { balance: payment.authorEarning },
-              },
-              { session },
-            )
-
-            console.log(
-              `Transferred ₦${payment.authorEarning} to author ${payment.author}`,
-            )
-          }
+          await User.findByIdAndUpdate(
+            payment.author,
+            {
+              $inc: { balance: payment.authorEarning },
+            },
+            { session },
+          )
         }
 
-        // Create Withdraw Request (duplicate-proof)
+        // 🔹 WITHDRAW (duplicate safe)
         if (payment.author && order.authority === ORDER_AUTHORITY.client) {
           const existingWithdraw = await Withdraw.findOne({
             user: payment.author,
@@ -524,15 +417,12 @@ const confirmPayment = async (query: Record<string, any>) => {
               ],
               { session },
             )
-
-            console.log(
-              `Withdraw request created for payment ${payment._id} → ₦${payment.authorEarning}`,
-            )
           }
         }
       }
+
       // ========================================
-      // Handle SUBSCRIPTION payment
+      // SUBSCRIPTION PAYMENT
       // ========================================
       else if (payment.modelType === PAYMENT_MODEL_TYPE.Subscription) {
         const subscription = await Subscription.findById(
@@ -550,7 +440,7 @@ const confirmPayment = async (query: Record<string, any>) => {
             paymentStatus: PAYMENT_STATUS.paid,
             status: SUBSCRIPTION_STATUS.active,
           },
-          { new: true, session },
+          { session },
         )
 
         await Package.findByIdAndUpdate(
@@ -559,59 +449,19 @@ const confirmPayment = async (query: Record<string, any>) => {
           { session },
         )
 
-        const now = new Date()
-        const previousSubscription = await Subscription.findOne({
-          user: subscription.user,
-          _id: { $ne: subscription._id },
-          paymentStatus: PAYMENT_STATUS.paid,
-          status: SUBSCRIPTION_STATUS.active,
-        }).session(session)
-
-        if (previousSubscription) {
-          if (
-            previousSubscription.expiredAt &&
-            previousSubscription.expiredAt > now
-          ) {
-            if (subscription.expiredAt) {
-              previousSubscription.expiredAt = new Date(
-                previousSubscription.expiredAt.getTime() +
-                  (subscription.expiredAt.getTime() - now.getTime()),
-              )
-            }
-          } else {
-            if (subscription.expiredAt) {
-              previousSubscription.expiredAt = subscription.expiredAt
-            }
-            previousSubscription.isExpired = false
-          }
-
-          await previousSubscription.save({ session })
-
-          await Payment.findByIdAndUpdate(
-            paymentId,
-            {
-              subscription: previousSubscription._id,
-            },
-            { session },
-          )
-
-          await Subscription.findByIdAndDelete(subscription._id, { session })
-        }
-
-        const finalExpiryDate = subscription.expiredAt || new Date()
         await User.findByIdAndUpdate(
           payment.user,
-          { packageExpiry: finalExpiryDate },
+          { packageExpiry: subscription.expiredAt },
           { session },
         )
       }
 
-      // Send notifications
+      // 🔔 NOTIFICATION
       await paymentNotifyToUser('SUCCESS', payment)
       await paymentNotifyToAdmin('SUCCESS', payment)
 
       await session.commitTransaction()
-      return result
+      return payment
     } catch (error: any) {
       await session.abortTransaction()
       attempt++
@@ -621,19 +471,17 @@ const confirmPayment = async (query: Record<string, any>) => {
           try {
             await refundPaystackPayment(
               verifiedPaymentId,
-              paymentId.amount,
+              0,
               'Refund Request',
             )
           } catch (refundError: any) {
             console.error('Refund failed:', refundError.message)
           }
         }
+
         throw new AppError(httpStatus.BAD_GATEWAY, error.message)
       }
 
-      console.warn(
-        `Retrying transaction (attempt ${attempt + 1}/${maxRetries})`,
-      )
       await new Promise((resolve) => setTimeout(resolve, 1000))
     } finally {
       session.endSession()
