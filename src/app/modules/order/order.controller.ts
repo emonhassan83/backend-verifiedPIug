@@ -106,6 +106,39 @@ const myVendorOrders = catchAsync(async (req: Request, res: Response) => {
   })
 })
 
+const myVendorOrdersByVendor = catchAsync(async (req: Request, res: Response) => {
+  req.query.authority = ORDER_AUTHORITY.vendor
+  req.query.receiver = req.user._id
+
+  // Preserve searchTerm
+  const searchTerm = req.query.searchTerm
+  delete req.query.searchTerm // Prevent filter overwrite
+
+  const result = await OrderService.getVendorOrders(req.query, req.params.vendorId)
+
+  // Manual client-side filtering (fallback)
+  let filteredData = result.data
+
+  if (searchTerm) {
+    const regex = new RegExp(searchTerm as string, 'i')
+    filteredData = filteredData.filter((order: any) => regex.test(order.title))
+  }
+
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: 'Vendor orders by vendorID retrieved successfully',
+    meta: {
+      ...result.meta,
+      total: filteredData.length,
+      totalPage: Math.ceil(
+        filteredData.length / (Number(req.query.limit) || 10),
+      ),
+    },
+    data: filteredData,
+  })
+})
+
 // Get Order by ID
 const getAIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await OrderService.getAIntoDB(req.params.id)
@@ -177,6 +210,7 @@ export const OrderController = {
   myVendorOrders,
   allClientOrders,
   allVendorOrders,
+  myVendorOrdersByVendor,
   myClientOrders,
   getAIntoDB,
   updateAIntoDB,

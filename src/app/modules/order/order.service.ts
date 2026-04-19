@@ -16,6 +16,7 @@ import { Payment } from '../payment/payment.model'
 import { USER_ROLE } from '../user/user.constant'
 import { PAYMENT_MODEL_TYPE } from '../payment/payment.interface'
 import { AssignProject } from '../assignProject/assignProject.models'
+import { sendOrderStatusRunningEmail } from '../../utils/emailNotify'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -27,7 +28,6 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
     receiver: receiverId,
     latitude,
     longitude,
-    duration,
     totalAmount,
   } = payload
 
@@ -82,18 +82,6 @@ const insertIntoDB = async (userId: string, payload: TOrder) => {
     }
 
     payload.locationUrl = generateLocationUrl(latitude, longitude)
-  }
-
-  // 5. Auto-calculate endDate based on duration (assuming duration in days)
-  if (duration && payload.startDate) {
-    const start = new Date(payload.startDate)
-    if (isNaN(start.getTime())) {
-      throw new AppError(httpStatus.BAD_REQUEST, 'Invalid start date format')
-    }
-
-    const end = new Date(start)
-    end.setDate(start.getDate() + duration)
-    payload.endDate = end.toISOString().split('T')[0] // YYYY-MM-DD
   }
 
   // 6. Payment logic: initialAmount = 50% of totalAmount
@@ -200,6 +188,57 @@ const getMyIntoDB = async (query: Record<string, any>, userId: string) => {
     meta,
   }
 }
+
+// service
+const getVendorOrders = async (query: Record<string, any>, userId: string) => {
+  const baseQuery = {
+    sender: new mongoose.Types.ObjectId(userId),
+    isDeleted: false,
+  };
+
+  const OrderModel = new QueryBuilder(
+    Order.find(baseQuery).populate([
+      { path: 'sender', select: 'name photoUrl isKycVerified' },
+      { path: 'receiver', select: 'name photoUrl isKycVerified' }, // Planner
+    ]),
+    query,
+  )
+    .search(['title'])
+    .filter()
+    .paginate()
+    .sort()                
+    .fields();
+
+  let data = await OrderModel.modelQuery.lean();
+
+  // AssignProject চেক (isAssigned ফিল্ড)
+  const orderIds = data.map((order: any) => order._id);
+
+  const assignedOrders = await AssignProject.find(
+    {
+      vendorOrder: { $in: orderIds },
+      isDeleted: false,
+    },
+    { vendorOrder: 1 }
+  ).lean();
+
+  const assignedOrderSet = new Set(
+    assignedOrders.map((assign: any) => assign.vendorOrder.toString())
+  );
+
+  // isAssigned ফিল্ড যোগ করা
+  data = data.map((order: any) => ({
+    ...order,
+    isAssigned: assignedOrderSet.has(order._id.toString()),
+  }));
+
+  const meta = await OrderModel.countTotal();
+
+  return {
+    data,
+    meta,
+  };
+};
 
 // Get Order by ID
 const getAIntoDB = async (id: string) => {
@@ -411,6 +450,12 @@ const changeStatusFromDB = async (
     { new: true },
   )
 
+  // Send email when status changes from pending to running
+  if (status === ORDER_STATUS.running && order.status === ORDER_STATUS.pending) {
+    const planner = order.sender; // sender is planner
+    await sendOrderStatusRunningEmail(order, planner);
+  }
+
   // Status change notification to BOTH sender and receiver
   await changeOrderStatusNotification(
     order.sender as Types.ObjectId,
@@ -460,6 +505,7 @@ export const OrderService = {
   insertIntoDB,
   getAllIntoDB,
   getMyIntoDB,
+  getVendorOrders,
   getAIntoDB,
   updateAIntoDB,
   cancelOrderFromDB,

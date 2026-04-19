@@ -54,6 +54,12 @@ router.get(
 )
 
 router.get(
+  '/author/vendor-orders/:vendorId',
+  auth(USER_ROLE.planer),
+  OrderController.myVendorOrdersByVendor,
+)
+
+router.get(
   '/vendor-orders',
   auth(USER_ROLE.admin),
   OrderController.allVendorOrders,

@@ -17,11 +17,12 @@ const createValidationSchema = z.object({
     description: z
       .string({ required_error: 'Description is required' })
       .min(20),
-    duration: z.number({ required_error: 'Duration is required' }).positive(),
+    date: z.string({ required_error: 'Order date is required' }),
     totalAmount: z
       .number({ required_error: 'Total amount is required' })
       .positive(),
-    startDate: z.string({ required_error: 'Start date is required' }),
+    startTime: z.string({ required_error: 'Start time is required' }),
+    endTime: z.string({ required_error: 'End time is required' }),
     longitude: z.number({
       required_error: 'longitude is required!',
     }),
@@ -38,11 +39,11 @@ const updateValidationSchema = z.object({
     type: z.string().min(3).optional(),
     shortDescription: z.string().min(10).max(200).optional(),
     description: z.string().min(20).optional(),
-    duration: z.number().positive().optional(),
+    date: z.string().optional(),
     totalAmount: z.number().positive().optional(),
     finalAmount: z.number().positive().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
+    startTime: z.string().optional(),
+    endTime: z.string().optional(),
     actualStartDate: z.string().optional(),
     actualEndDate: z.string().optional(),
     longitude: z.number().optional(),

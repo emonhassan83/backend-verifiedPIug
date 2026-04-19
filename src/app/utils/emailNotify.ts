@@ -99,3 +99,63 @@ export const sendWithdrawStatusChangeEmail = async (
     baseEmailTemplate(`Withdrawal ${statusText}`, user.name, content),
   )
 }
+
+/**
+ * Order Status Change Email (Pending → Running)
+ */
+export const sendOrderStatusRunningEmail = async (order: any, planner: any) => {
+  const subject = `Your Order Has Been Accepted - ${order.title}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+      <h2 style="color: #555;">Order Status Updated</h2>
+      <p>Dear ${planner.name || 'Planner'},</p>
+      
+      <p>Your order has been successfully moved to <strong>Running</strong> status.</p>
+      
+      <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p><strong>Order Title:</strong> ${order.title}</p>
+        <p><strong>Client:</strong> ${order.receiver?.name || 'Client'}</p>
+        <p><strong>Status:</strong> <span style="color: #555; font-weight: bold;">Running</span></p>
+        <p><strong>Start Date:</strong> ${order.startDate}</p>
+      </div>
+
+      <p>The client has accepted your order and initial payment is confirmed.</p>
+      <p>You can now start working on the project.</p>
+
+      <p>Best regards,<br/>Your App Team</p>
+    </div>
+  `;
+
+  await emailSender(planner.email, subject, html);
+};
+
+/**
+ * Initial Payment Confirmation Email (Client pays initial amount)
+ */
+export const sendInitialPaymentConfirmationEmail = async (order: any, planner: any) => {
+  const subject = `💰 Initial Payment Received - ${order.title}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+      <h2 style="color: #555;">Initial Payment Confirmed</h2>
+      <p>Dear ${planner.name || 'Planner'},</p>
+      
+      <p>Great news! The client has made the <strong>Initial Payment</strong> for your order.</p>
+      
+      <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p><strong>Order:</strong> ${order.title}</p>
+        <p><strong>Client:</strong> ${order.receiver?.name || 'Client'}</p>
+        <p><strong>Amount Received:</strong> ₦${order.initialAmount || order.totalAmount}</p>
+        <p><strong>Status:</strong> <span style="color: #555;">Running</span></p>
+      </div>
+
+      <p>Your order is now officially in <strong>Running</strong> status.</p>
+      <p>Please start the work as per the agreement.</p>
+
+      <p>Best regards,<br/>Your App Team</p>
+    </div>
+  `;
+
+  await emailSender(planner.email, subject, html);
+};

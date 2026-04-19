@@ -41,6 +41,7 @@ import {
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 import dayjs from 'dayjs'
 import { modelType } from '../chat/chat.interface'
+import { sendInitialPaymentConfirmationEmail } from '../../utils/emailNotify'
 
 const checkout = async (payload: TPayment) => {
   const transactionId = generateTransactionId()
@@ -246,7 +247,8 @@ const confirmPayment = async (query: Record<string, any>) => {
         paymentQuery.type = type
       }
 
-      const existingPayment = await Payment.findOne(paymentQuery).session(session)
+      const existingPayment =
+        await Payment.findOne(paymentQuery).session(session)
 
       if (!existingPayment) {
         throw new AppError(httpStatus.NOT_FOUND, 'Payment not found!')
@@ -261,7 +263,10 @@ const confirmPayment = async (query: Record<string, any>) => {
       }
 
       if (!verification.status || verification.data.status !== 'success') {
-        throw new AppError(httpStatus.BAD_REQUEST, 'Payment verification failed')
+        throw new AppError(
+          httpStatus.BAD_REQUEST,
+          'Payment verification failed',
+        )
       }
 
       verifiedPaymentId = verification.data.id
@@ -346,6 +351,113 @@ const confirmPayment = async (query: Record<string, any>) => {
               },
               { session },
             )
+          }
+
+          // Create Order Chat (duplicate-proof)
+          let orderChat = await Chat.findOne({
+            order: order._id,
+            modelType: modelType.Order,
+            reference: order._id,
+            isDeleted: false,
+          }).session(session);
+
+          if (!orderChat) {
+            [orderChat] = await Chat.create(
+              [
+                {
+                  order: order._id,
+                  modelType: modelType.Order,
+                  reference: order._id,
+                  name: `Order Chat - ${order.title}`,
+                  status: CHAT_STATUS.active,
+                  isDeleted: false,
+                },
+              ],
+              { session },
+            );
+
+            const participants = [
+              { user: order.sender, role: PARTICIPANT_ROLE.planer },
+              { user: order.receiver, role: PARTICIPANT_ROLE.user },
+            ];
+
+            const existingParticipants = await Participant.find({
+              chat: orderChat._id,
+              isDeleted: false,
+            }).session(session);
+
+            const existingUserIds = new Set(
+              existingParticipants.map((p) => p.user.toString()),
+            );
+
+            const newParticipants = participants.filter(
+              (p) => !existingUserIds.has(p.user.toString()),
+            );
+
+            if (newParticipants.length > 0) {
+              await Participant.insertMany(
+                newParticipants.map((p) => ({
+                  chat: orderChat!._id,
+                  user: p.user,
+                  role: p.role,
+                  status: PARTICIPANT_STATUS.active,
+                })),
+                { session },
+              );
+            }
+          }
+
+          // Create Group Chat (duplicate-proof)
+          let groupChat = await Chat.findOne({
+            project: project._id,
+            modelType: modelType.Project,
+            reference: project._id,
+            isDeleted: false,
+          }).session(session);
+
+          if (!groupChat) {
+            [groupChat] = await Chat.create(
+              [
+                {
+                  project: project._id,
+                  modelType: modelType.Project,
+                  reference: project._id,
+                  name: `Project Group - ${order.title}`,
+                  status: CHAT_STATUS.active,
+                  isDeleted: false,
+                },
+              ],
+              { session },
+            );
+
+            const existingGroupParticipants = await Participant.find({
+              chat: groupChat._id,
+              isDeleted: false,
+            }).session(session);
+
+            const existingGroupIds = new Set(
+              existingGroupParticipants.map((p) => p.user.toString()),
+            );
+
+            if (!existingGroupIds.has(order.sender.toString())) {
+              await Participant.create(
+                [
+                  {
+                    chat: groupChat._id,
+                    user: order.sender,
+                    role: PARTICIPANT_ROLE.planer,
+                    status: PARTICIPANT_STATUS.active,
+                  },
+                ],
+                { session },
+              );
+            }
+          }
+
+          // 🔥 SEND EMAIL TO PLANNER (Sender)
+          const planner = await User.findById(order.sender)
+          if (planner && planner.email) {
+            await sendInitialPaymentConfirmationEmail(order, planner)
           }
         }
 
@@ -469,11 +581,7 @@ const confirmPayment = async (query: Record<string, any>) => {
       if (attempt === maxRetries) {
         if (verifiedPaymentId) {
           try {
-            await refundPaystackPayment(
-              verifiedPaymentId,
-              0,
-              'Refund Request',
-            )
+            await refundPaystackPayment(verifiedPaymentId, 0, 'Refund Request')
           } catch (refundError: any) {
             console.error('Refund failed:', refundError.message)
           }

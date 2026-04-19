@@ -13,6 +13,8 @@ import { PAYMENT_STATUS } from '../payment/payment.constant'
 import { SUBSCRIPTION_STATUS } from '../subscription/subscription.constants'
 import { PaystackRecipient } from '../paystackRecipient/paystackRecipient.model'
 import { RECIPIENT_STATUS } from '../paystackRecipient/paystackRecipient.constant'
+import mongoose from 'mongoose'
+import { Message } from '../messages/messages.models'
 
 const generateLocationUrl = (lat: number, lng: number) => {
   return `https://www.google.com/maps?q=${lat},${lng}`
@@ -99,32 +101,70 @@ const geUserByIdFromDB = async (id: string) => {
 
   const today = new Date()
 
-  const [activeSubscription, paystackRecipient] = await Promise.all([
-    Subscription.findOne({
-      user: id,
-      paymentStatus: PAYMENT_STATUS.paid,
-      status: SUBSCRIPTION_STATUS.active,
-      isDeleted: false,
-      isExpired: false,
-      expiredAt: { $gt: today },
-    })
-      .select('type expiredAt')
-      .lean(),
+  // Parallel queries for better performance
+  const [activeSubscription, paystackRecipient, unreadData] = await Promise.all(
+    [
+      // 1. Active Subscription
+      Subscription.findOne({
+        user: id,
+        paymentStatus: PAYMENT_STATUS.paid,
+        status: SUBSCRIPTION_STATUS.active,
+        isDeleted: false,
+        isExpired: false,
+        expiredAt: { $gt: today },
+      })
+        .select('type expiredAt')
+        .lean(),
 
-    PaystackRecipient.findOne({
-      user: id,
-      isDeleted: false,
-      status: { $in: [RECIPIENT_STATUS.pending, RECIPIENT_STATUS.verified] },
-    })
-      .select('_id')
-      .lean(),
-  ])
+      // 2. Paystack Recipient
+      PaystackRecipient.findOne({
+        user: id,
+        isDeleted: false,
+        status: { $in: [RECIPIENT_STATUS.pending, RECIPIENT_STATUS.verified] },
+      })
+        .select('_id')
+        .lean(),
+
+      // 3. Unread Messages Count (New)
+      Message.aggregate([
+        {
+          $match: {
+            chat: { $exists: true },
+            sender: { $ne: new mongoose.Types.ObjectId(id) }, // অন্যের পাঠানো মেসেজ
+            seen: false,
+          },
+        },
+        {
+          $lookup: {
+            from: 'participants',
+            localField: 'chat',
+            foreignField: 'chat',
+            as: 'participant',
+          },
+        },
+        {
+          $match: {
+            'participant.user': new mongoose.Types.ObjectId(id), // এই ইউজার এই চ্যাটের participant
+          },
+        },
+        {
+          $count: 'unreadCount',
+        },
+      ]),
+    ],
+  )
+
+  const unreadCount = unreadData.length > 0 ? unreadData[0].unreadCount : 0
 
   return {
     ...user,
     isActiveSubscription: !!activeSubscription,
     type: activeSubscription?.type || null,
     isPaystackRecipient: !!paystackRecipient,
+
+    // New fields for unread messages
+    isUnreadMessage: unreadCount > 0,
+    unreadMessageCount: unreadCount,
   }
 }
 

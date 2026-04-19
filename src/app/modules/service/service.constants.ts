@@ -11,13 +11,13 @@ export const SERVICE_STATUS = {
 
 export const PRICE_TYPE = {
   fixed: 'fixed',
-  per_person: 'per_person',
-  hourly: 'hourly',
-  per_day: 'per_day',
-  per_event: 'per_event',
-  per_unit: 'per_unit',
-  package: 'package',
-  custom: 'custom',
+  starting_from: 'starting_from',
+  request_quote: 'request_quote',
+  // per_day: 'per_day',
+  // per_event: 'per_event',
+  // per_unit: 'per_unit',
+  // package: 'package',
+  // custom: 'custom',
 } as const
 
 export type TServiceAuthority = keyof typeof SERVICE_AUTHORITY

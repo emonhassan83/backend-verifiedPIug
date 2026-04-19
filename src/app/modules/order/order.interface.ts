@@ -13,7 +13,7 @@ export interface TOrder {
   shortDescription: string;
   description: string;
 
-  duration: number;                // in days/hours
+  date: string;                // in days/hours
   totalAmount: number;             // renamed from amount (more clear)
 
   // ── Payment Fields ────────────────────────────────────────
@@ -37,8 +37,8 @@ export interface TOrder {
   };
 
   // ── Timeline & Status ─────────────────────────────────────
-  startDate?: string | Date;
-  endDate?: string | Date;
+  startTime?: string | Date;
+  endTime?: string | Date;
   actualStartDate?: Date;          // when project actually started
   actualEndDate?: Date;            // when project completed
 

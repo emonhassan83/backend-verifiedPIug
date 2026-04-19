@@ -38,13 +38,13 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'User not found')
   }
 
-  // Check if the user is KYC verified
-  if (!user?.isKycVerified) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
-    )
-  }
+  // // Check if the user is KYC verified
+  // if (!user?.isKycVerified) {
+  //   throw new AppError(
+  //     httpStatus.FORBIDDEN,
+  //     'Your account is not kyc verified. Please complete kyc verification to create a subscription.',
+  //   )
+  // }
 
   // 2. Check subscription permission & get current level
   const { level } = await checkSubscriptionPermission(
@@ -73,7 +73,7 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     isDeleted: false,
   })
 
-  let maxAllowed = Infinity
+  let maxAllowed = 1
 
   if (level === 'starter') {
     maxAllowed = 1
@@ -153,7 +153,7 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
       ]),
     query,
   )
-    .search(['title'])
+    .search(['title', 'address'])
     .filter()
     .paginate()
     .sort()
@@ -219,7 +219,7 @@ const getAllRecommendServices = async (
       ]),
     query,
   )
-    .search(['title', 'subtitle'])
+    .search(['title', 'address'])
     .filter()
     .sort()
     .paginate()

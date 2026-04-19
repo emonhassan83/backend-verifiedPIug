@@ -50,8 +50,8 @@ const orderSchema = new Schema<TOrder>(
       type: String,
       required: true,
     },
-    duration: {
-      type: Number,
+    date: {
+      type: String,
       required: true,
     },
     totalAmount: {
@@ -78,8 +78,8 @@ const orderSchema = new Schema<TOrder>(
     initialPayment: paymentSubSchema,
     finalPayment: paymentSubSchema,
 
-    startDate: { type: String, required: true, },
-    endDate: { type: String, required: true, },
+    startTime: { type: String, required: true, },
+    endTime: { type: String, required: true, },
     actualStartDate: { type: Date },
     actualEndDate: { type: Date },
 

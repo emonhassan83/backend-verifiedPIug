@@ -173,16 +173,16 @@ const planerAnalysisRevenue = async (
   }
 
   // Subscription check: only Pro or Elite can access analysis data
-  const { level } = await checkSubscriptionPermission(
-    userId,
-    'analyticsDashboard',
-  )
-  if (level === 'starter') {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'Analysis are only available in Pro or Elite plans. Please upgrade your subscription.',
-    )
-  }
+  // const { level } = await checkSubscriptionPermission(
+  //   userId,
+  //   'analyticsDashboard',
+  // )
+  // if (level === 'starter') {
+  //   throw new AppError(
+  //     httpStatus.FORBIDDEN,
+  //     'Analysis are only available in Pro or Elite plans. Please upgrade your subscription.',
+  //   )
+  // }
 
   const { event_year, category_year, revenue_year } = query
 

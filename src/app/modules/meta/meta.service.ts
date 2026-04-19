@@ -128,51 +128,50 @@ const adminMetaData = async (
 }
 
 const planerMetaData = async (userId: string) => {
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user?.isDeleted || user.role !== USER_ROLE.planer) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Planer not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Planer not found!');
   }
 
-  // Today in string format
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. active project, upcoming event and new lead count
+  // 1. Active Project Count
   const activeProjectCount = await Project.countDocuments({
     author: userId,
     status: PROJECT_STATUS.ongoing,
     isDeleted: false,
-  })
+  });
 
+  // 2. Upcoming Event Count
   const upcomingEventCount = await Order.countDocuments({
     sender: userId,
     authority: ORDER_AUTHORITY.client,
     status: { $in: [ORDER_STATUS.running, ORDER_STATUS.pending] },
     startDate: { $gte: todayStr },
     isDeleted: false,
-  })
+  });
 
+  // 3. New Lead Count
   const newLeadCount = await Order.aggregate([
     {
       $match: {
-        sender: new mongoose.Types.ObjectId(userId), // Planner is the sender
-        authority: ORDER_AUTHORITY.client, // Order received from client
+        sender: new mongoose.Types.ObjectId(userId),
+        authority: ORDER_AUTHORITY.client,
         isDeleted: false,
       },
     },
     {
       $group: {
-        _id: '$receiver', // Group by client (receiver)
+        _id: '$receiver',
         orderCount: { $sum: 1 },
         firstOrder: { $min: '$createdAt' },
       },
     },
     { $match: { orderCount: 1 } },
-    {
-      $count: 'newLeads',
-    },
-  ]).then((result) => result[0]?.newLeads || 0)
+    { $count: 'newLeads' },
+  ]).then((result) => result[0]?.newLeads || 0);
 
-  // 2. total author Earnings
+  // 4. Total Earnings
   const totalEarnings = await Payment.aggregate([
     {
       $match: {
@@ -189,9 +188,9 @@ const planerMetaData = async (userId: string) => {
         total: { $sum: '$authorEarning' },
       },
     },
-  ]).then((result) => result[0]?.total || 0)
+  ]).then((result) => result[0]?.total || 0);
 
-  // 3. Upcoming event data (last 5 upcoming/running orders with startDate >= today)
+  // 5. Upcoming Events with correct sorting: Running first, then Pending
   const upcomingEvents = await Order.find({
     sender: userId,
     authority: ORDER_AUTHORITY.client,
@@ -200,57 +199,58 @@ const planerMetaData = async (userId: string) => {
     isDeleted: false,
   })
     .select('title type startDate status')
-    .sort({ startDate: 1 }) // earliest upcoming first
-    .limit(5)
+    .sort({
+      status: -1,        // running (comes first) > pending
+      startDate: 1,      // তারপর earliest date
+    })
+    .limit(5);
 
-  // 3. recentNotify → Client
+  // 6. Recent Notifications
   const recentNotification = await Notification.find({
     receiver: userId,
     isDeleted: false,
   })
     .select('message description model_type read createdAt')
     .sort({ createdAt: -1 })
-    .limit(3)
+    .limit(3);
 
   return {
     activeProjectCount,
     upcomingEventCount,
     newLeadCount,
     totalEarnings,
-    upcomingEvents,
+    upcomingEvents,        // ← এখন running আগে, pending পরে
     recentNotification,
-  }
-}
+  };
+};
 
 const vendorMetaData = async (userId: string) => {
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user?.isDeleted || user.role !== USER_ROLE.vendor) {
-    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!')
+    throw new AppError(httpStatus.NOT_FOUND, 'Vendor not found!');
   }
 
-  // Today in string format (YYYY-MM-DD)
-  const todayStr = new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Active Booking Count (running orders where vendor is receiver)
+  // Active & Total Booking Count
   const activeBookingCount = await Order.countDocuments({
     sender: new mongoose.Types.ObjectId(userId),
     authority: ORDER_AUTHORITY.vendor,
     status: ORDER_STATUS.running,
     isDeleted: false,
-  })
+  });
 
-  // 2. Total Booking Count (all non-cancelled/denied orders)
   const totalBookingCount = await Order.countDocuments({
     sender: new mongoose.Types.ObjectId(userId),
     authority: ORDER_AUTHORITY.vendor,
     status: { $nin: [ORDER_STATUS.cancelled, ORDER_STATUS.denied] },
     isDeleted: false,
-  })
+  });
 
-  // 3. Monthly Revenue (last 30 days earning after 3% commission deduction)
-  const lastMonthStart = new Date()
-  lastMonthStart.setDate(lastMonthStart.getDate() - 30)
-  lastMonthStart.setHours(0, 0, 0, 0)
+  // Monthly & Total Earnings
+  const lastMonthStart = new Date();
+  lastMonthStart.setDate(lastMonthStart.getDate() - 30);
+  lastMonthStart.setHours(0, 0, 0, 0);
 
   const monthlyRevenueResult = await Order.aggregate([
     {
@@ -259,21 +259,14 @@ const vendorMetaData = async (userId: string) => {
         authority: ORDER_AUTHORITY.vendor,
         status: ORDER_STATUS.completed,
         isDeleted: false,
-        actualEndDate: { $gte: lastMonthStart }, // completed in last 30 days
+        actualEndDate: { $gte: lastMonthStart },
       },
     },
-    {
-      $group: {
-        _id: null,
-        totalAmount: { $sum: '$totalAmount' },
-      },
-    },
-  ])
+    { $group: { _id: null, totalAmount: { $sum: '$totalAmount' } } },
+  ]);
 
-  const monthlyTotalAmount = monthlyRevenueResult[0]?.totalAmount || 0
-  const monthlyRevenueAfterCommission = monthlyTotalAmount * 0.97 // 3% commission deducted
+  const monthlyRevenue = Math.round((monthlyRevenueResult[0]?.totalAmount || 0) * 0.97);
 
-  // 4. Total Earning (all-time after 3% commission)
   const totalEarningResult = await Order.aggregate([
     {
       $match: {
@@ -283,18 +276,12 @@ const vendorMetaData = async (userId: string) => {
         isDeleted: false,
       },
     },
-    {
-      $group: {
-        _id: null,
-        totalAmount: { $sum: '$totalAmount' },
-      },
-    },
-  ])
+    { $group: { _id: null, totalAmount: { $sum: '$totalAmount' } } },
+  ]);
 
-  const totalAmountAllTime = totalEarningResult[0]?.totalAmount || 0
-  const totalEarningsAfterCommission = totalAmountAllTime * 0.97 // 3% commission deducted
+  const totalEarnings = Math.round((totalEarningResult[0]?.totalAmount || 0) * 0.97);
 
-  // 5. Upcoming Bookings (startDate >= today + status running/pending)
+  // Upcoming Bookings with correct priority: Running first, then Pending
   const upcomingBooking = await Order.find({
     sender: new mongoose.Types.ObjectId(userId),
     authority: ORDER_AUTHORITY.vendor,
@@ -303,10 +290,13 @@ const vendorMetaData = async (userId: string) => {
     isDeleted: false,
   })
     .select('title type startDate endDate status')
-    .sort({ startDate: 1 }) // earliest first
-    .limit(5)
+    .sort({
+      status: -1,      // running আগে (running > pending)
+      startDate: 1,  
+    })
+    .limit(5);
 
-  // 6. Top Partnerships (top 4 planners with most orders from this vendor)
+  // Top Partnerships
   const topPartnerships = await Order.aggregate([
     {
       $match: {
@@ -318,7 +308,7 @@ const vendorMetaData = async (userId: string) => {
     },
     {
       $group: {
-        _id: '$receiver', // planner ID
+        _id: '$receiver',
         orderCount: { $sum: 1 },
       },
     },
@@ -343,17 +333,17 @@ const vendorMetaData = async (userId: string) => {
     },
     { $sort: { orderCount: -1 } },
     { $limit: 4 },
-  ])
+  ]);
 
   return {
     activeBookingCount,
     totalBookingCount,
-    monthlyRevenue: Math.round(monthlyRevenueAfterCommission), // last 30 days after commission
-    totalEarnings: Math.round(totalEarningsAfterCommission), // all-time after commission
+    monthlyRevenue,
+    totalEarnings,
     upcomingBooking,
     topPartnerships,
-  }
-}
+  };
+};
 
 const userMetaData = async (userId: string) => {
   const user = await User.findById(userId)
