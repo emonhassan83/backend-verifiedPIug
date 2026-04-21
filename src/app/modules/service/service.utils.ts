@@ -8,6 +8,98 @@ import { Favorite } from '../favorite/favorite.model'
 import { canSendNotification, TNotifyCategory } from '../notification/notification.utils'
 import emailSender from '../../utils/emailSender'
 
+// utils/southAfricaProvinces.ts
+export const SA_PROVINCES = [
+  {
+    name: 'Gauteng',
+    location: { lng: 28.0473, lat: -26.2041 },
+    locationUrl: 'https://maps.google.com/?q=Gauteng'
+  },
+  {
+    name: 'Western Cape',
+    location: { lng: 18.4241, lat: -33.9249 },
+    locationUrl: 'https://maps.google.com/?q=Western+Cape'
+  },
+  {
+    name: 'KwaZulu-Natal',
+    location: { lng: 31.0218, lat: -29.8587 },
+    locationUrl: 'https://maps.google.com/?q=KwaZulu-Natal'
+  },
+  {
+    name: 'Eastern Cape',
+    location: { lng: 26.4194, lat: -32.2968 },
+    locationUrl: 'https://maps.google.com/?q=Eastern+Cape'
+  },
+  {
+    name: 'Mpumalanga',
+    location: { lng: 30.0000, lat: -25.5653 },
+    locationUrl: 'https://maps.google.com/?q=Mpumalanga'
+  },
+  {
+    name: 'Limpopo',
+    location: { lng: 29.4179, lat: -23.4013 },
+    locationUrl: 'https://maps.google.com/?q=Limpopo'
+  },
+  {
+    name: 'North West',
+    location: { lng: 24.7415, lat: -26.6981 },
+    locationUrl: 'https://maps.google.com/?q=North+West'
+  },
+  {
+    name: 'Free State',
+    location: { lng: 26.7968, lat: -28.4541 },
+    locationUrl: 'https://maps.google.com/?q=Free+State'
+  },
+  {
+    name: 'Northern Cape',
+    location: { lng: 24.0125, lat: -30.3024 },
+    locationUrl: 'https://maps.google.com/?q=Northern+Cape'
+  }
+]
+
+// Helper function to get province details by name
+export const getProvinceDetails = (provinceName: string) => {
+  const province = SA_PROVINCES.find(
+    p => p.name.toLowerCase() === provinceName.toLowerCase()
+  )
+  
+  if (!province) {
+    throw new Error(`Invalid province name: ${provinceName}. Valid provinces: ${SA_PROVINCES.map(p => p.name).join(', ')}`)
+  }
+  
+  return province
+}
+
+// Helper function to validate and attach province details
+export const attachProvinceDetails = (provinceNames: string[]) => {
+  const provincesWithDetails = []
+  
+  for (const name of provinceNames) {
+    const province = getProvinceDetails(name)
+    provincesWithDetails.push({
+      name: province.name,
+      locationUrl: province.locationUrl,
+      location: {
+        type: 'Point',
+        coordinates: [province.location.lng, province.location.lat]
+      }
+    })
+  }
+  
+  return provincesWithDetails
+}
+
+// Helper function to calculate distance
+export const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371 // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2)
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
+
 export const attachFavoriteFlag = async (
   services: any[],
   userId: string,

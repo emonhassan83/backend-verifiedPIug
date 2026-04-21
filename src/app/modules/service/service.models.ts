@@ -42,25 +42,18 @@ const serviceSchema = new Schema<TService>(
       required: true,
       default: [],
     },
-    address: {
-      type: String,
-      required: true,
-    },
-    locationUrl: {
-      type: String,
-      required: true,
-    },
-    location: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point',
+    // Service areas (provinces with their center location)
+    serviceAreas: [
+      {
+        name: { type: String, required: true }, // Province name: 'Gauteng', 'Western Cape'
+        locationUrl: { type: String }, // Google map URL or any reference
+        location: {
+          type: { type: String, enum: ['Point'], default: 'Point' },
+          coordinates: { type: [Number], required: true }, // [longitude, latitude]
+        },
       },
-      coordinates: {
-        type: [Number], // [longitude, latitude]
-        default: [0, 0],
-      },
-    },
+    ],
+
     price: {
       type: Number,
       required: true,

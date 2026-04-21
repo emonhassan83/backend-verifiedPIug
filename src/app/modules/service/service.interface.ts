@@ -1,6 +1,15 @@
 import { Model, Types } from 'mongoose'
 import { TPriceType, TServiceAuthority, TServiceStatus } from './service.constants'
 
+type TServiceAreas = {
+  name: string
+  locationUrl: string
+  location: {
+    type: 'Point'
+    coordinates: [number, number] // [longitude, latitude]
+  }
+}
+
 export interface TService {
   _id?: string
   author: Types.ObjectId
@@ -10,14 +19,15 @@ export interface TService {
   subtitle: string
   description: string
   images: string[]
-  address: string
-  locationUrl: string
-  location: {
-    type: 'Point'
-    coordinates: [number, number] // [longitude, latitude]
-  }
-  latitude: number
-  longitude: number
+  // address: string
+  // locationUrl: string
+  // location: {
+  //   type: 'Point'
+  //   coordinates: [number, number] // [longitude, latitude]
+  // }
+  serviceAreas: TServiceAreas[]
+  // latitude: number
+  // longitude: number
   price: number
   priceType: TPriceType
   isFeatured: boolean

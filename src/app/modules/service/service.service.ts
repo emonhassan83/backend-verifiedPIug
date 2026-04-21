@@ -13,6 +13,8 @@ import {
 } from './service.constants'
 import {
   attachFavoriteFlag,
+  attachProvinceDetails,
+  calculateDistance,
   sendServiceActivatedEmail,
   sendServiceRejectedEmail,
   sendServiceStatusNotifyToAuthor,
@@ -30,7 +32,7 @@ const generateGoogleMapUrl = (lat: number, lng: number) => {
  * Create a new service/listing with subscription-based active listing limit check
  */
 const insertIntoDB = async (userId: string, payload: TService, files: any) => {
-  const { category: categoryId, latitude, longitude } = payload
+  const { category: categoryId, serviceAreas } = payload
 
   // 1. Validate user
   const user = await User.findById(userId)
@@ -58,15 +60,21 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Category not found')
   }
 
-  // 4. Validate location
-  if (!latitude || !longitude) {
+  // 4. Validate serviceAreas (at least one area required)
+  if (!serviceAreas || serviceAreas.length === 0) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
-      'Latitude and longitude are required',
+      'At least one service area is required',
     )
   }
 
-  // 5. Enforce active listing limit based on subscription level
+  // 5. Get province names from request (user only sends names)
+  const provinceNames = serviceAreas.map((area: any) => area.name)
+
+  // 6. Auto-attach province details from utils
+  const validatedServiceAreas = attachProvinceDetails(provinceNames)
+
+  // 7. Enforce active listing limit based on subscription level
   const currentActiveCount = await Service.countDocuments({
     author: userId,
     status: SERVICE_STATUS.active,
@@ -91,7 +99,7 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     )
   }
 
-  // 6. Handle image uploads
+  // 8. Handle image uploads
   const uploadedFiles = files?.files
   if (!uploadedFiles || uploadedFiles.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'At least one image is required')
@@ -107,24 +115,20 @@ const insertIntoDB = async (userId: string, payload: TService, files: any) => {
     imageUrls.push(uploadedUrl)
   }
 
-  // 7. Prepare location URL and coordinates
-  const locationUrl = generateGoogleMapUrl(latitude, longitude)
-
-  // 8. Final payload setup
+  // 9. Final payload
   const finalPayload = {
     ...payload,
     images: imageUrls,
     author: user._id,
     authority: user.role as 'vendor' | 'planer',
-    locationUrl,
-    location: {
-      type: 'Point',
-      coordinates: [longitude, latitude], // MongoDB GeoJSON format: [lng, lat]
-    },
-    status: SERVICE_STATUS.pending, // default pending for review
+    serviceAreas: validatedServiceAreas, // Auto-attached with full details
+    status: SERVICE_STATUS.pending,
   }
 
-  // 9. Create service
+  // Remove any raw serviceAreas if present
+  delete (finalPayload as any).serviceAreasRaw
+
+  // 10. Create service
   const result = await Service.create(finalPayload)
   if (!result) {
     throw new AppError(
@@ -189,8 +193,10 @@ const getAllRecommendServices = async (
   }
 
   const [userLng, userLat] = user.location.coordinates
+  const radiusInKm = parseFloat((query.radius as string)) || 50 // Default 50km
+  const radiusInMeters = radiusInKm * 1000
 
-  // 2️⃣ Geo filter (5 KM)
+  // 2️⃣ Geo filter using serviceAreas
   const baseQuery = {
     isDeleted: false,
     status: SERVICE_STATUS.active,
@@ -198,41 +204,74 @@ const getAllRecommendServices = async (
       user.role === USER_ROLE.user
         ? SERVICE_AUTHORITY.planer
         : SERVICE_AUTHORITY.vendor,
-    location: {
-      $geoWithin: {
-        $centerSphere: [[userLng, userLat], 5000 / 6378137],
-      },
-    },
+    'serviceAreas.location': {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [userLng, userLat]
+        },
+        $maxDistance: radiusInMeters
+      }
+    }
   }
 
-  // 3️⃣ Query Builder (Search, Filter, Pagination)
+  // 3️⃣ Query Builder
   const serviceQuery = new QueryBuilder(
     Service.find(baseQuery)
-      .select('title subtitle images address locationUrl location author')
+      .select('title subtitle images description price priceType isFeatured serviceAreas author category')
       .populate([
         {
           path: 'author',
-          select:
-            'name photoUrl categories avgRating ratingCount isKycVerified',
+          select: 'name photoUrl categories avgRating ratingCount isKycVerified',
         },
         { path: 'category', select: 'title' },
       ]),
     query,
   )
-    .search(['title', 'address'])
+    .search(['title', 'subtitle', 'description'])
     .filter()
     .sort()
     .paginate()
     .fields()
 
-  const services = await serviceQuery.modelQuery
+  let services = await serviceQuery.modelQuery
   const meta = await serviceQuery.countTotal()
 
+  // 4️⃣ Calculate distance for each service manually
+  services = services.map((service: any) => {
+    let minDistance = Infinity
+    let closestProvince = null
+    
+    // Find closest service area
+    for (const area of service.serviceAreas || []) {
+      if (area.location && area.location.coordinates) {
+        const [areaLng, areaLat] = area.location.coordinates
+        const distance = calculateDistance(userLat, userLng, areaLat, areaLng)
+        
+        if (distance < minDistance) {
+          minDistance = distance
+          closestProvince = area.name
+        }
+      }
+    }
+    
+    // Convert to plain object and add distance
+    const serviceObj = service.toObject()
+    serviceObj.distance = Math.round(minDistance * 10) / 10
+    serviceObj.closestProvince = closestProvince
+    
+    return serviceObj
+  })
+
+  // 5️⃣ Sort by distance
+  services.sort((a: any, b: any) => a.distance - b.distance)
+
+  // 6️⃣ Attach favorite flag
   const data = await attachFavoriteFlag(services, userId)
 
   return {
     meta,
-    data,
+    data
   }
 }
 
@@ -272,19 +311,30 @@ const updateAIntoDB = async (
     throw new AppError(httpStatus.NOT_FOUND, 'Service not found!')
   }
 
-  /* -------------------- LOCATION UPDATE -------------------- */
-  const latitude = (payload as any)?.latitude
-  const longitude = (payload as any)?.longitude
+  // Handle serviceAreas update (user only sends names)
+  const serviceAreas = (payload as any)?.serviceAreas
 
-  if (latitude && longitude) {
-    const locationUrl = generateGoogleMapUrl(latitude, longitude)
-
-    payload.locationUrl = locationUrl
-    payload.location = {
-      type: 'Point',
-      coordinates: [longitude, latitude], // MongoDB: [lng, lat]
+  if (serviceAreas && Array.isArray(serviceAreas)) {
+    if (serviceAreas.length === 0) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        'At least one service area is required',
+      )
     }
+
+    // Get province names from request
+    const provinceNames = serviceAreas.map((area: any) => area.name)
+
+    // Auto-attach province details from utils
+    const validatedServiceAreas = attachProvinceDetails(provinceNames)
+    payload.serviceAreas = validatedServiceAreas as any
   }
+
+  // Remove any raw fields
+  delete (payload as any).latitude
+  delete (payload as any).longitude
+  delete (payload as any).location
+  delete (payload as any).locationUrl
 
   // -------------------- Images Handling (Replace old images) --------------------
   let finalImages: string[] = []
