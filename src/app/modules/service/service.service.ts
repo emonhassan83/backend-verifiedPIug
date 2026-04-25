@@ -145,7 +145,7 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
   const ServiceModel = new QueryBuilder(
     Service.find({ isDeleted: false })
       .select(
-        'title subtitle images address locationUrl location author category isFeatured status',
+        'title subtitle images address locationUrl location serviceAreas author category isFeatured status',
       )
       .populate([
         {
