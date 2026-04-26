@@ -190,6 +190,13 @@ const planerMetaData = async (userId: string) => {
     },
   ]).then((result) => result[0]?.total || 0);
 
+  // Recommend service based on user location
+  const recommendService = await ServiceService.getAllRecommendServices(
+    { limit: 2 },
+    userId,
+  )
+  const modifiedRecommend = recommendService.data
+
   // 5. Upcoming Events with correct sorting: Running first, then Pending
   const upcomingEvents = await Order.find({
     sender: userId,
@@ -219,6 +226,7 @@ const planerMetaData = async (userId: string) => {
     upcomingEventCount,
     newLeadCount,
     totalEarnings,
+    recommendServices: modifiedRecommend,
     upcomingEvents,        // ← এখন running আগে, pending পরে
     recentNotification,
   };
@@ -281,6 +289,13 @@ const vendorMetaData = async (userId: string) => {
 
   const totalEarnings = Math.round((totalEarningResult[0]?.totalAmount || 0) * 0.97);
 
+  // Recommend service based on user location
+  const recommendService = await ServiceService.getAllRecommendServices(
+    { limit: 2 },
+    userId,
+  )
+  const modifiedRecommend = recommendService.data
+
   // Upcoming Bookings with correct priority: Running first, then Pending
   const upcomingBooking = await Order.find({
     sender: new mongoose.Types.ObjectId(userId),
@@ -340,6 +355,7 @@ const vendorMetaData = async (userId: string) => {
     totalBookingCount,
     monthlyRevenue,
     totalEarnings,
+    recommendServices: modifiedRecommend,
     upcomingBooking,
     topPartnerships,
   };
