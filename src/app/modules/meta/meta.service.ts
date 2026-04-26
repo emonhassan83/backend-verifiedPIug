@@ -217,7 +217,7 @@ const planerMetaData = async (userId: string) => {
     receiver: userId,
     isDeleted: false,
   })
-    .select('message description model_type read createdAt')
+    .select('message description model_type read reference createdAt')
     .sort({ createdAt: -1 })
     .limit(3);
 
