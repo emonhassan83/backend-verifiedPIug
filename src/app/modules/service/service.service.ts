@@ -150,8 +150,7 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
       .populate([
         {
           path: 'author',
-          select:
-            'name photoUrl email role categories avgRating ratingCount isKycVerified',
+          select: 'name photoUrl email role categories avgRating ratingCount isKycVerified',
         },
         { path: 'category', select: 'title' },
       ]),
@@ -161,69 +160,69 @@ const getAllIntoDB = async (query: Record<string, any>, userId: string) => {
     .filter()
     .paginate()
     .sort()
-    .fields()
+    .fields();
 
-  const services = await ServiceModel.modelQuery
-  const meta = await ServiceModel.countTotal()
+  // ✅ .lean() ব্যবহার করুন — plain object পাবেন
+  const services = await ServiceModel.modelQuery.lean();
 
-  const data = await attachFavoriteFlag(services, userId)
+  const data = await attachFavoriteFlag(services, userId);
+
+  const meta = await ServiceModel.countTotal();
 
   return {
     data,
     meta,
-  }
-}
-
+  };
+};
 const getAllRecommendServices = async (
   query: Record<string, any>,
   userId: string,
 ) => {
-  // 1️⃣ Validate User
-  const user = await User.findById(userId)
+  const user = await User.findById(userId);
   if (!user || user.isDeleted) {
-    throw new AppError(httpStatus.NOT_FOUND, 'User not found')
+    throw new AppError(httpStatus.NOT_FOUND, 'User not found');
   }
 
-  if (
-    !user.location ||
-    !user.location.coordinates ||
-    user.location.coordinates.length !== 2
-  ) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'User location is not set!')
+  if (!user.location?.coordinates || user.location.coordinates.length !== 2) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'User location is not set!');
   }
 
-  const [userLng, userLat] = user.location.coordinates
-  const radiusInKm = parseFloat((query.radius as string)) || 50 // Default 50km
-  const radiusInMeters = radiusInKm * 1000
+  const [userLng, userLat] = user.location.coordinates;
+  const radiusInKm = parseFloat((query.radius as string)) || 50;
+  const radiusInRadians = radiusInKm / 6371;
 
-  // 2️⃣ Geo filter using serviceAreas
+  const baseAuthority = user.role === USER_ROLE.user
+    ? SERVICE_AUTHORITY.planer
+    : SERVICE_AUTHORITY.vendor;
+
+  const geoWithinQuery = {
+    $centerSphere: [[userLng, userLat], radiusInRadians],
+  };
+
   const baseQuery = {
     isDeleted: false,
     status: SERVICE_STATUS.active,
-    authority:
-      user.role === USER_ROLE.user
-        ? SERVICE_AUTHORITY.planer
-        : SERVICE_AUTHORITY.vendor,
-    'serviceAreas.location': {
-      $near: {
-        $geometry: {
-          type: 'Point',
-          coordinates: [userLng, userLat]
-        },
-        $maxDistance: radiusInMeters
-      }
-    }
-  }
+    authority: baseAuthority,
+    $or: [
+      {
+        'serviceAreas.0': { $exists: true },
+        'serviceAreas.location': { $geoWithin: geoWithinQuery },
+      },
+      {
+        $or: [
+          { serviceAreas: { $exists: false } },
+          { serviceAreas: { $size: 0 } },
+        ],
+        location: { $geoWithin: geoWithinQuery },
+      },
+    ],
+  };
 
-  // 3️⃣ Query Builder
   const serviceQuery = new QueryBuilder(
     Service.find(baseQuery)
-      .select('title subtitle images description price priceType isFeatured serviceAreas author category')
+      .select('title subtitle images description price priceType isFeatured serviceAreas location author category')
       .populate([
-        {
-          path: 'author',
-          select: 'name photoUrl categories avgRating ratingCount isKycVerified',
-        },
+        { path: 'author', select: 'name photoUrl categories avgRating ratingCount isKycVerified' },
         { path: 'category', select: 'title' },
       ]),
     query,
@@ -232,48 +231,55 @@ const getAllRecommendServices = async (
     .filter()
     .sort()
     .paginate()
-    .fields()
+    .fields();
 
-  let services = await serviceQuery.modelQuery
-  const meta = await serviceQuery.countTotal()
+  // ✅ .lean() ব্যবহার করুন — plain objects পাবেন
+  let services = await serviceQuery.modelQuery.lean();
 
-  // 4️⃣ Calculate distance for each service manually
+  // Distance calculation
   services = services.map((service: any) => {
-    let minDistance = Infinity
-    let closestProvince = null
-    
-    // Find closest service area
-    for (const area of service.serviceAreas || []) {
-      if (area.location && area.location.coordinates) {
-        const [areaLng, areaLat] = area.location.coordinates
-        const distance = calculateDistance(userLat, userLng, areaLat, areaLng)
-        
-        if (distance < minDistance) {
-          minDistance = distance
-          closestProvince = area.name
+    let minDistance = Infinity;
+    let closestProvince = null;
+
+    if (Array.isArray(service.serviceAreas) && service.serviceAreas.length > 0) {
+      for (const area of service.serviceAreas) {
+        if (area?.location?.coordinates?.length === 2) {
+          const [areaLng, areaLat] = area.location.coordinates;
+          const distance = calculateDistance(userLat, userLng, areaLat, areaLng);
+
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestProvince = area.name;
+          }
         }
       }
+    } else if (service.location?.coordinates?.length === 2) {
+      const [svcLng, svcLat] = service.location.coordinates;
+      minDistance = calculateDistance(userLat, userLng, svcLat, svcLng);
+      closestProvince = service.address || 'Unknown';
     }
-    
-    // Convert to plain object and add distance
-    const serviceObj = service.toObject()
-    serviceObj.distance = Math.round(minDistance * 10) / 10
-    serviceObj.closestProvince = closestProvince
-    
-    return serviceObj
-  })
 
-  // 5️⃣ Sort by distance
-  services.sort((a: any, b: any) => a.distance - b.distance)
+    return {
+      ...service,
+      distance: minDistance === Infinity ? null : Math.round(minDistance * 10) / 10,
+      closestProvince,
+    };
+  });
 
-  // 6️⃣ Attach favorite flag
-  const data = await attachFavoriteFlag(services, userId)
+  // Sort by distance
+  services.sort((a: any, b: any) => {
+    if (a.distance === null) return 1;
+    if (b.distance === null) return -1;
+    return a.distance - b.distance;
+  });
 
-  return {
-    meta,
-    data
-  }
-}
+  // ✅ attachFavoriteFlag-এ plain objects পাঠানো হচ্ছে
+  const data = await attachFavoriteFlag(services, userId);
+
+  const meta = await serviceQuery.countTotal();
+
+  return { meta, data };
+};
 
 // Get Service by ID
 const getAIntoDB = async (id: string, userId: string) => {

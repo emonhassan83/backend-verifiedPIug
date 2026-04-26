@@ -83,6 +83,8 @@ const serviceSchema = new Schema<TService>(
   { timestamps: true },
 )
 
-serviceSchema.index({ location: '2dsphere' })
+serviceSchema.index({ 'serviceAreas.location': '2dsphere' });
+serviceSchema.index({ location: '2dsphere' });           // পুরনো location-এর জন্য
+serviceSchema.index({ authority: 1, status: 1, isDeleted: 1 });
 
 export const Service = model<TService, TServiceModel>('Service', serviceSchema)

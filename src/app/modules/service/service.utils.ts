@@ -106,26 +106,26 @@ export const attachFavoriteFlag = async (
 ) => {
   if (!userId) {
     return services.map(service => ({
-      ...service.toObject(),
+      ...service,           // ← toObject() না করে সরাসরি spread
       isFavorite: false,
-    }))
+    }));
   }
 
   // 1️⃣ Get all favorite service IDs for this user
   const favorites = await Favorite.find({ user: userId })
     .select('service')
-    .lean()
+    .lean();
 
   const favoriteServiceIds = new Set(
     favorites.map(fav => fav.service.toString()),
-  )
+  );
 
   // 2️⃣ Attach isFavorite flag
   return services.map(service => ({
-    ...service.toObject(),
-    isFavorite: favoriteServiceIds.has(service._id.toString()),
-  }))
-}
+    ...service,             // ← এখানেও toObject() সরিয়ে দিলাম
+    isFavorite: favoriteServiceIds.has(service._id?.toString() || ''),
+  }));
+};
 
 export const sendServiceStatusNotifyToAuthor = async (
   status: keyof typeof SERVICE_STATUS,
